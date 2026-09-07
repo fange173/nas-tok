@@ -1,0 +1,44 @@
+services:
+  nastok:
+    # 大多数 NAS 是 x86_64（amd64）。若 NAS 是 ARM，改成 linux/arm64
+    platform: linux/amd64
+    build: .
+    container_name: nas-tok
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./media/videos:/media/videos
+      # - /path/on/nas/movies:/media/videos/movies
+      # - /path/on/nas/clips:/media/videos/clips
+    environment:
+      - SECRET_KEY=change-me-to-a-long-random-secret-in-production
+      - MEDIA_ROOT=/media/videos
+      - DATABASE_URL=sqlite:////app/data/nasTok.db
+      - TZ=Asia/Shanghai
+      - SCAN_CACHE_TTL=300
+      - LOG_RETENTION_DAYS=90
+      - LOGIN_MAX_FAILURES=8
+      - LOGIN_LOCK_SECONDS=300
+      # 部署在 nginx 等反向代理之后时才设为 true（直连时保持 false，防止伪造 XFF 绕过登录限流）
+      - TRUST_PROXY_HEADERS=false
+      # HTTPS 反代后设为 true，使 Cookie 仅走加密信道
+      - COOKIE_SECURE=false
+      # 需要在线接口文档（/docs）时设为 true
+      - ENABLE_DOCS=false
+      # 无法用 admin/admin123 登录时：改为 true，重启一次成功后再改回 false
+      # 注意：不要把 data/*.db 打进镜像/仓库，否则会带上别人改过的密码，看起来像「首次启动就登不上」
+      - RESET_ADMIN_PASSWORD=false
+    # 数据库备份(在 NAS 上建个定时任务即可;cookie 含 JWT,放私有目录并收紧权限):
+    #   curl -sS -c ~/.nastok-cookies -X POST -H 'Content-Type: application/json' \
+    #     -d '{"username":"admin","password":"<密码>"}' http://127.0.0.1:8080/api/auth/login && chmod 600 ~/.nastok-cookies
+    #   curl -sS -b ~/.nastok-cookies -X POST -OJ http://127.0.0.1:8080/api/admin/backup
+    # 或容器内直接备份(镜像内无 sqlite3 CLI,用 python 标准库 online backup):
+    #   docker exec nas-tok python -c "import sqlite3; sqlite3.connect('/app/data/nasTok.db').backup(sqlite3.connect('/app/data/manual.db'))"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped

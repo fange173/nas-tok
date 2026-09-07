@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="NasTok" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>NasTok</title>
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/static/style.css?v=20260804b" />
+</head>
+<body>
+  <!-- ===== 登录页 ===== -->
+  <section id="page-login" class="page auth-page active">
+    <div class="auth-card">
+      <div class="brand">
+        <h1>NasTok</h1>
+        <p>NAS 轻量短视频浏览器</p>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <div class="form-group">
+          <label for="login-username">用户名</label>
+          <input id="login-username" name="username" required autocomplete="username" placeholder="请输入用户名" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">密码</label>
+          <div class="password-wrap">
+            <input id="login-password" name="password" type="password" required autocomplete="current-password" placeholder="请输入密码" />
+            <button type="button" class="toggle-eye" data-target="login-password" aria-label="显示密码" title="显示/隐藏密码">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="login-remember" />
+          记住登录
+        </label>
+        <div class="form-error" id="login-error"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-btn">登 录</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===== 强制改密 ===== -->
+  <section id="page-change-pwd" class="page auth-page">
+    <div class="auth-card">
+      <div class="brand">
+        <h1>修改密码</h1>
+        <p>首次登录须修改初始密码后才能继续</p>
+      </div>
+      <form id="change-pwd-form">
+        <div class="form-group">
+          <label for="old-password">原密码</label>
+          <div class="password-wrap">
+            <input id="old-password" type="password" required autocomplete="current-password" />
+            <button type="button" class="toggle-eye" data-target="old-password" aria-label="显示密码">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="new-password">新密码（至少 6 位）</label>
+          <div class="password-wrap">
+            <input id="new-password" type="password" required minlength="6" autocomplete="new-password" />
+            <button type="button" class="toggle-eye" data-target="new-password" aria-label="显示密码">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="confirm-password">确认新密码</label>
+          <div class="password-wrap">
+            <input id="confirm-password" type="password" required minlength="6" autocomplete="new-password" />
+            <button type="button" class="toggle-eye" data-target="confirm-password" aria-label="显示密码">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="form-error" id="pwd-error" role="alert"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="change-pwd-btn">确认修改</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===== 主视频流 ===== -->
+  <section id="page-feed" class="page feed-page">
+    <div class="top-bar">
+      <div class="brand-mini desktop-only">NasTok</div>
+      <div class="feed-tabs">
+        <button type="button" data-tab="all" class="active">推荐</button>
+        <button type="button" data-tab="fav">喜欢</button>
+        <button type="button" data-tab="recent">最近</button>
+        <select class="tag-filter hidden" id="tag-filter-select" aria-label="按标记筛选">
+          <option value="">默认</option>
+          <option value="__all__">全部标记</option>
+        </select>
+        <select class="tag-filter hidden" id="library-filter-select" aria-label="按存储库筛选">
+          <option value="">全部库</option>
+        </select>
+        <input class="feed-search" id="feed-search" type="search" placeholder="搜索标题或路径" maxlength="128" aria-label="搜索" />
+      </div>
+      <div class="top-actions">
+        <div class="sort-switch desktop-only">
+          <button type="button" data-sort="random" class="active">随机</button>
+          <button type="button" data-sort="newest">最新</button>
+        </div>
+        <button type="button" class="chip-btn top-icon-btn desktop-only" id="media-mode-btn" title="仅视频" aria-label="切换媒体类型"></button>
+        <button type="button" class="chip-btn top-icon-btn desktop-only" id="refresh-btn" title="刷新" aria-label="刷新"></button>
+        <div class="top-more" id="top-more">
+          <button type="button" class="chip-btn top-icon-btn top-more-btn" id="top-more-btn" title="更多" aria-label="更多" aria-expanded="false">⋯</button>
+          <div class="top-more-panel">
+            <a href="#" class="chip-btn accent hidden" id="admin-link">后台</a>
+            <button type="button" class="chip-btn" id="logout-btn">退出</button>
+          </div>
+        </div>
+        <div class="top-more m-menu" id="func-menu">
+          <button type="button" class="chip-btn top-icon-btn top-more-btn" id="func-menu-btn" title="功能" aria-label="功能菜单" aria-expanded="false"></button>
+          <div class="top-more-panel">
+            <button type="button" class="chip-btn mobile-menu-btn" id="menu-media-btn"></button>
+            <button type="button" class="chip-btn mobile-menu-btn" id="menu-sort-btn"></button>
+            <button type="button" class="chip-btn mobile-menu-btn" id="menu-refresh-btn">刷新</button>
+          </div>
+        </div>
+        <div class="top-more m-menu" id="account-menu">
+          <button type="button" class="chip-btn top-icon-btn top-more-btn" id="account-menu-btn" title="账户" aria-label="账户菜单" aria-expanded="false"></button>
+          <div class="top-more-panel">
+            <a href="#" class="chip-btn accent hidden" id="admin-link-m">后台</a>
+            <button type="button" class="chip-btn" id="logout-btn-m">退出</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="exit-immersive-btn hidden desktop-only" id="exit-immersive-btn" aria-label="退出全屏"></button>
+
+    <div class="feed-viewport fit-contain" id="feed-viewport">
+      <div class="feed-track" id="feed-track"></div>
+      <div class="loader-overlay" id="feed-loader">
+        <div class="spinner"></div>
+        <div class="loader-text">正在获取视频列表…</div>
+      </div>
+      <div class="empty-state hidden" id="feed-empty">
+        <p id="feed-empty-title">暂无视频</p>
+        <p class="empty-sub" id="feed-empty-sub">请将视频放入挂载目录，或检查存储库是否已启用</p>
+        <div class="empty-actions" id="feed-empty-actions"></div>
+      </div>
+      <div class="speed-toast" id="speed-toast">2x</div>
+      <div class="seek-toast" id="seek-toast"></div>
+      <div class="feed-toast" id="feed-toast" role="status" aria-live="polite"></div>
+      <div class="help-overlay hidden" id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <div class="help-card">
+          <h3 id="help-title">快捷键</h3>
+          <ul>
+            <li><kbd>空格</kbd> 播放 / 暂停</li>
+            <li><kbd>←</kbd> <kbd>→</kbd> 快退 / 快进 5 秒</li>
+            <li><kbd>Shift</kbd>+<kbd>←/→</kbd> 快退 / 快进 30 秒</li>
+            <li><kbd>↑</kbd> <kbd>↓</kbd> 上一条 / 下一条</li>
+            <li><kbd>J</kbd> / <kbd>PageDown</kbd> 下一条</li>
+            <li><kbd>K</kbd> / <kbd>PageUp</kbd> 上一条</li>
+            <li><kbd>M</kbd> 静音 · 底部滑块调音量</li>
+            <li><kbd>&lt;</kbd> <kbd>&gt;</kbd> 减慢 / 加快播放</li>
+            <li><kbd>?</kbd> 打开 / 关闭本说明</li>
+          </ul>
+          <p class="help-tip">手机：上下滑动切换 · 点按播放/暂停 · 长按 2 倍速<br>电脑：方向键 / 拖动 / 滚轮切换 · 点击左右区域快进退 · 长按 2 倍速</p>
+          <button type="button" class="btn btn-primary btn-block" id="help-close">知道了</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-dock" id="bottom-dock">
+      <div class="scrub-time" id="scrub-time">0:00 / 0:00</div>
+      <div class="progress-bar" id="global-progress" role="slider" tabindex="0" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-fill" id="global-progress-fill"></div>
+        <div class="progress-thumb" id="global-progress-thumb"></div>
+      </div>
+      <div class="dock-row" id="dock-row">
+        <span class="time-label" id="global-time">0:00 / 0:00</span>
+        <span class="feed-counter" id="feed-counter">0 / 0</span>
+        <div class="player-ctrl-group desktop-only" id="player-ctrl-group">
+          <button type="button" class="btn-icon" id="pc-prev-btn" title="上一个" style="width:34px;height:34px" aria-label="上一个"></button>
+          <button type="button" class="btn-icon" id="pc-playpause-btn" title="播放" style="width:38px;height:38px" aria-label="播放" aria-pressed="false"></button>
+          <button type="button" class="btn-icon" id="pc-next-btn" title="下一个" style="width:34px;height:34px" aria-label="下一个"></button>
+        </div>
+        <div class="vol-wrap">
+          <button type="button" class="btn-icon" id="mute-btn" title="静音" style="width:34px;height:34px" aria-label="静音"></button>
+          <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <select class="fit-select" id="fit-mode" aria-label="画面适配">
+          <option value="contain">适应画面</option>
+          <option value="cover">放大裁剪</option>
+          <option value="fill">拉伸铺满</option>
+          <option value="width">适应宽度</option>
+          <option value="height">适应高度</option>
+        </select>
+        <select class="fit-select" id="rate-select" aria-label="播放速度">
+          <option value="0.5">0.5×</option>
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+        <div class="dock-spacer"></div>
+        <button type="button" class="btn-icon" id="help-btn" title="帮助" style="width:34px;height:34px" aria-label="帮助">?</button>
+        <button type="button" class="btn-icon desktop-only" id="fullscreen-btn" title="全屏" style="width:34px;height:34px" aria-label="全屏"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 后台管理 ===== -->
+  <section id="page-admin" class="page admin-page">
+    <header class="admin-header">
+      <h1>后台管理</h1>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn btn-ghost btn-sm" id="back-feed-btn">返回播放</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="admin-logout-btn">退出</button>
+      </div>
+    </header>
+    <nav class="admin-tabs">
+      <button type="button" data-panel="libs" class="active">存储库</button>
+      <button type="button" data-panel="users">用户管理</button>
+      <button type="button" data-panel="tags">标记管理</button>
+      <button type="button" data-panel="shares">分享管理</button>
+      <button type="button" data-panel="logs">操作记录</button>
+    </nav>
+    <div class="admin-body">
+      <div class="panel" id="panel-logs">
+        <div class="toolbar">
+          <select id="log-user-filter">
+            <option value="">全部用户</option>
+          </select>
+          <select id="log-action-filter">
+            <option value="">全部动作</option>
+            <option value="login">登录</option>
+            <option value="view">观看</option>
+            <option value="edit">编辑</option>
+            <option value="delete">删除</option>
+            <option value="share">分享</option>
+            <option value="admin">管理</option>
+            <option value="tag_create">新建标记</option>
+            <option value="tag_update">修改标记</option>
+            <option value="tag_delete">删除标记</option>
+            <option value="tag_assign">视频标记</option>
+          </select>
+          <button type="button" class="btn btn-ghost btn-sm" id="log-refresh">刷新</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>用户</th>
+                <th>动作</th>
+                <th>详情</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button type="button" class="btn btn-ghost btn-sm" id="logs-prev">上一页</button>
+          <span id="logs-page-info">1 / 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="logs-next">下一页</button>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-users">
+        <form class="create-form" id="create-user-form">
+          <div class="form-group">
+            <label for="new-user-name">用户名</label>
+            <input id="new-user-name" required minlength="2" />
+          </div>
+          <div class="form-group">
+            <label for="new-user-pass">密码</label>
+            <input id="new-user-pass" type="password" required minlength="6" autocomplete="new-password" />
+          </div>
+          <div class="form-group">
+            <label for="new-user-role">角色</label>
+            <select id="new-user-role">
+              <option value="user">用户</option>
+              <option value="admin">管理员</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">新建用户</button>
+        </form>
+        <p class="empty-sub" style="margin:0 0 12px">新建用户默认不分配存储库；需在操作中配置可见库。</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>角色</th>
+                <th>存储库</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel active" id="panel-libs">
+        <div class="hint-box" id="lib-hint"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <button type="button" class="btn btn-ghost btn-sm" id="lib-sync-btn">同步一级子目录</button>
+          <button type="button" class="btn btn-ghost btn-sm hidden" id="backup-download-btn">下载备份</button>
+          <label class="btn btn-ghost btn-sm hidden" id="backup-restore-label">恢复备份
+            <input type="file" id="backup-restore-input" accept=".db,application/octet-stream" hidden />
+          </label>
+        </div>
+
+        <div class="discover-list" id="discover-list"></div>
+        <form class="create-form" id="create-lib-form">
+          <div class="form-group">
+            <label>库名称</label>
+            <input id="new-lib-name" required />
+          </div>
+          <div class="form-group">
+            <label>相对路径（空=根目录）</label>
+            <input id="new-lib-path" placeholder="例如 movies 或 movies/2024" />
+          </div>
+          <div class="create-form-actions">
+            <button type="submit" class="btn btn-primary btn-sm">手动添加</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="open-browser-btn">浏览目录</button>
+          </div>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>路径</th>
+                <th>条目</th>
+                <th>占用</th>
+                <th>目录存在</th>
+                <th>扫描模式</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="libs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-shares">
+        <div class="toolbar">
+          <button type="button" class="btn btn-ghost btn-sm" id="shares-refresh">刷新</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>标题</th>
+                <th>路径</th>
+                <th>创建者</th>
+                <th>创建时间</th>
+                <th>打开次数</th>
+                <th>独立访客</th>
+                <th>最近访问</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="shares-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button type="button" class="btn btn-ghost btn-sm" id="shares-prev">上一页</button>
+          <span id="shares-page-info">1 / 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="shares-next">下一页</button>
+        </div>
+        <div class="share-detail-card hidden" id="share-detail-card">
+          <div class="browser-head">
+            <strong id="share-detail-title">访问明细</strong>
+            <button type="button" class="btn btn-ghost btn-sm" id="share-detail-close">关闭</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>访客标识</th>
+                  <th>UA</th>
+                </tr>
+              </thead>
+              <tbody id="share-detail-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-tags">
+        <div class="toolbar">
+          <select id="tags-user-filter">
+            <option value="">全部可管理用户</option>
+          </select>
+          <button type="button" class="btn btn-ghost btn-sm" id="tags-refresh">刷新</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户</th>
+                <th>标记名</th>
+                <th>创建时间</th>
+                <th>更新时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tags-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button type="button" class="btn btn-ghost btn-sm" id="tags-prev">上一页</button>
+          <span id="tags-page-info">1 / 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="tags-next">下一页</button>
+        </div>
+      </div>
+    </div>
+    <div class="admin-toast" id="admin-toast" role="status" aria-live="polite"></div>
+  </section>
+
+  <!-- ===== 公开分享页 ===== -->
+  <section id="page-share" class="page share-page">
+    <div class="share-shell">
+      <div class="share-video-wrap">
+        <video id="share-video" playsinline webkit-playsinline></video>
+        <img id="share-image" class="hidden" alt="" />
+        <div class="album-track hidden" id="share-album"></div>
+        <div class="loader-overlay hidden" id="share-loader">
+          <div class="spinner"></div>
+          <div class="loader-text">加载中…</div>
+        </div>
+        <div class="error-overlay" id="share-error">
+          <div class="error-title">无法播放</div>
+          <div class="error-msg" id="share-error-msg">分享无效或视频已删除</div>
+        </div>
+        <div class="share-password-card hidden" id="share-password-card">
+          <p>此分享受密码保护</p>
+          <input id="share-password-input" type="password" placeholder="输入分享密码" autocomplete="off" />
+          <button type="button" class="btn btn-primary btn-sm" id="share-password-btn">解锁</button>
+        </div>
+      </div>
+      <div class="share-meta">
+        <h1 id="share-title">分享视频</h1>
+        <p id="share-sub">NasTok 公开分享</p>
+        <div class="share-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="share-play-btn">播放 / 暂停</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="share-mute-btn">静音</button>
+          <button type="button" class="btn btn-primary btn-sm" id="share-copy-btn">复制链接</button>
+          <a class="btn btn-ghost btn-sm" id="share-home-link" href="/">打开 NasTok</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-backdrop" id="share-modal">
+    <div class="modal">
+      <h3 id="share-modal-title">分享</h3>
+      <p class="empty-sub" id="share-modal-sub"></p>
+      <div class="form-group">
+        <label for="share-expire">有效期</label>
+        <select id="share-expire">
+          <option value="">永久</option>
+          <option value="1">1 小时</option>
+          <option value="24">1 天</option>
+          <option value="168">7 天</option>
+          <option value="720">30 天</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="share-pass">访问密码（可选）</label>
+        <input id="share-pass" type="password" maxlength="128" autocomplete="new-password" />
+      </div>
+      <div class="form-group">
+        <label for="share-max-views">最大打开次数（可选）</label>
+        <input id="share-max-views" type="number" min="1" max="1000000" placeholder="不限制" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="share-modal-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="share-modal-ok">创建并复制链接</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 用户存储库分配 ===== -->
+  <div class="modal-backdrop" id="user-libs-modal">
+    <div class="modal">
+      <h3 id="user-libs-title">配置存储库</h3>
+      <p class="empty-sub" id="user-libs-sub"></p>
+      <div id="user-libs-checks" class="user-libs-checks"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="user-libs-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="user-libs-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 编辑模态框 ===== -->
+  <div class="modal-backdrop" id="edit-modal">
+    <div class="modal">
+      <h3 id="edit-modal-title">编辑视频</h3>
+      <div id="edit-file-fields">
+        <div class="form-group">
+          <label>文件名</label>
+          <input id="edit-name" />
+        </div>
+        <div class="form-group">
+          <label>文件日期（修改 mtime）</label>
+          <input id="edit-date" type="datetime-local" />
+        </div>
+      </div>
+      <div id="edit-album-fields" class="hidden">
+        <div class="form-group">
+          <label>相册名</label>
+          <input id="edit-album-name" />
+        </div>
+        <div class="form-group">
+          <label>图片文件名</label>
+          <div id="edit-album-images" class="edit-album-images"></div>
+        </div>
+      </div>
+      <div class="form-error" id="edit-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="edit-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="edit-save">保存</button>
+        <button type="button" class="btn btn-danger" id="edit-delete">删除视频</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 目录浏览模态框 ===== -->
+  <div class="modal-backdrop" id="browser-modal">
+    <div class="modal modal-browser">
+      <div class="browser-head">
+        <h3>目录浏览器</h3>
+        <span class="browser-path" id="browser-path-label">/</span>
+      </div>
+      <div class="browser-toolbar">
+        <button type="button" class="btn btn-ghost btn-sm" id="browser-up" disabled>上级</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="browser-root">根目录</button>
+        <button type="button" class="btn btn-primary btn-sm" id="browser-add-current">添加当前目录为库</button>
+      </div>
+      <div class="browser-list" id="browser-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="browser-close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 标记模态框 ===== -->
+  <div class="modal-backdrop" id="tag-modal">
+    <div class="modal tag-modal">
+      <h3>标记管理</h3>
+      <div class="tag-modal-path" id="tag-modal-path"></div>
+      <div class="tag-create-row">
+        <input type="text" id="tag-new-input" placeholder="新建标记…" maxlength="64" />
+        <button type="button" class="btn btn-primary btn-sm" id="tag-create-btn">新建</button>
+      </div>
+      <div class="tag-list" id="tag-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="tag-save-btn">保存标记</button>
+        <button type="button" class="btn btn-ghost" id="tag-close-btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/main.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+# Python / 系统
+__pycache__/
+*.py[cod]
+.Python
+.DS_Store
+*.log
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+tests/_tmp*
+
+# 运行时数据:数据库(含 admin 密码哈希)与用户媒体内容,绝不入库
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.bak*
+media/videos/*
+!media/videos/.gitkeep
+!media/videos/samples/
+!media/videos/samples/**
+
+# OpenWolf / 本地 agent 状态(含路径、会话、dashboard token)
+.wolf/
+.claude/
+.codex/
+.cursor/
+.opencode/
+AGENTS.md
+CLAUDE.md
+Agents.md
+Claude.md
+
+# 编辑器
+.idea/
+.vscode/
+
+# 构建产物:导出的镜像 tar 包
+dist/
