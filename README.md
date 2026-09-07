@@ -30,7 +30,7 @@ NasTok turns folders of clips and pictures into an immersive feed: shuffle or ne
 | Backend | Python 3.11 · FastAPI 0.115 · SQLAlchemy 2.0 · SQLite (WAL) |
 | Auth | PyJWT (HttpOnly cookie) · PBKDF2-SHA256 (260k iterations) |
 | Frontend | Native ES modules (no bundler) · `style.css` · PWA |
-| Deploy | Docker (amd64/arm64) · docker compose |
+| Deploy | Docker Hub `fange173/nastok` (linux/amd64) · docker compose |
 | CI | GitHub Actions |
 
 ## Quick start
@@ -42,8 +42,17 @@ git clone https://github.com/fange173/nas-tok.git && cd nas-tok
 # Mount NAS folders (optional, as many as you need):
 # edit docker-compose.yml volumes, e.g.
 #   - /srv/nas/movies:/media/videos/movies
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+Or pull the image directly:
+
+```bash
+docker pull fange173/nastok:latest
+```
+
+To build locally instead of pulling: `docker compose up -d --build`.
 
 Open `http://<NAS-IP>:8080` and sign in with the **built-in system administrator**:
 

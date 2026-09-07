@@ -30,7 +30,7 @@ NasTok 把 NAS 上散落的视频和图片目录变成类似短视频 App 的浏
 | 后端 | Python 3.11 · FastAPI 0.115 · SQLAlchemy 2.0 · SQLite（WAL） |
 | 鉴权 | PyJWT（HttpOnly Cookie）· PBKDF2-SHA256（26 万次迭代） |
 | 前端 | 原生 ES Module SPA（零构建）· `style.css` · PWA |
-| 部署 | Docker（amd64/arm64）· docker compose |
+| 部署 | Docker Hub `fange173/nastok`（linux/amd64）· docker compose |
 | CI | GitHub Actions |
 
 ## 快速开始
@@ -42,8 +42,17 @@ git clone https://github.com/fange173/nas-tok.git && cd nas-tok
 # 把 NAS 上的视频目录挂进来（可选多个）
 # 编辑 docker-compose.yml 的 volumes，例如：
 #   - /srv/nas/movies:/media/videos/movies
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+或直接拉取镜像：
+
+```bash
+docker pull fange173/nastok:latest
+```
+
+若要在本地构建而不是拉取：`docker compose up -d --build`。
 
 访问 `http://<NAS-IP>:8080`，使用 **内置系统管理员** 登录：
 

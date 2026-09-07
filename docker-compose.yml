@@ -2,6 +2,7 @@ services:
   nastok:
     # 大多数 NAS 是 x86_64（amd64）。若 NAS 是 ARM，改成 linux/arm64
     platform: linux/amd64
+    image: fange173/nastok:latest
     build: .
     container_name: nas-tok
     ports:
