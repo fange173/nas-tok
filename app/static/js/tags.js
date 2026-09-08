@@ -1,5 +1,5 @@
 /* tags.js — 标记模态框与标记筛选(由 split_frontend.py 机械切割,勿手改顺序) */
-import { isVideoDead, pauseAll, resetAndLoad, showFeedToast } from './feed.js';
+import { currentTabValue, isVideoDead, pauseAll, resetAndLoad, showFeedToast } from './feed.js';
 import { getCurrentVideo } from './player.js';
 import { state } from './state.js';
 import { $, $$, api, escapeHtml } from './util.js';
@@ -163,53 +163,16 @@ import { $, $$, api, escapeHtml } from './util.js';
     }
 
     export function syncTagFilter() {
-      const sel = $("#tag-filter-select");
+      const sel = $("#feed-tab-select");
       if (!sel) return;
       const tags = state.tags || [];
-      if (tags.length === 0) {
-        sel.classList.add("hidden");
-        return;
-      }
-      sel.classList.remove("hidden");
-      let html = '<option value="">默认</option><option value="__all__">全部标记</option>';
-      for (const t of tags) {
-        html += `<option value="${t.id}">${escapeHtml(t.name)}</option>`;
+      let html = '<option value="all">推荐</option><option value="fav">喜欢</option>';
+      if (tags.length) {
+        html += '<option value="__all__">全部标记</option>';
+        for (const t of tags) {
+          html += `<option value="tag:${t.id}">${escapeHtml(t.name)}</option>`;
+        }
       }
       sel.innerHTML = html;
-      if (state.tagId) sel.value = String(state.tagId);
-      else if (state.tagged) sel.value = "__all__";
-      else sel.value = "";
+      sel.value = currentTabValue();
     }
-
-    $("#tag-filter-select").addEventListener("change", () => {
-      const val = $("#tag-filter-select").value;
-      if (val === "__all__") {
-        state.tagId = null;
-        state.tagged = true;
-      } else if (val) {
-        state.tagId = Number(val);
-        state.tagged = false;
-      } else {
-        // "默认"：回到无标记筛选，等同推荐
-        state.tagId = null;
-        state.tagged = false;
-        state.seed = null;
-        state.tab = "all";
-        $$(".feed-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === "all"));
-        resetAndLoad();
-        return;
-      }
-      $$(".feed-tabs button").forEach((b) => b.classList.remove("active"));
-      state.tab = null;
-      state.seed = null;
-      resetAndLoad();
-    });
-
-    // feed-tabs 点击时回到默认（无标记筛选）
-    $$(".feed-tabs button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        state.tagId = null;
-        state.tagged = false;
-        $("#tag-filter-select").value = "";
-      });
-    });

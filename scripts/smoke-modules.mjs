@@ -16,6 +16,7 @@ function fakeEl() {
     checked: false,
     textContent: "",
     innerHTML: "",
+    insertAdjacentHTML: noop,
     disabled: false,
     title: "",
     append: noop,
@@ -75,12 +76,11 @@ const { state } = await import(base + "state.js");
 
 if (!state || !Array.isArray(state.videos)) throw new Error("state 未正确导出");
 if (typeof main.bootstrap !== "function") throw new Error("bootstrap 未导出");
-if (typeof main.enterFeed !== "function") throw new Error("enterFeed 未导出");
 
 const feed = await import(base + "feed.js");
 const player = await import(base + "player.js");
 for (const [m, fns] of [
-  [feed, ["resetAndLoad", "playCurrent", "nextVideo", "streamUrl", "showFeedToast"]],
+  [feed, ["enterFeed", "resetAndLoad", "playCurrent", "nextVideo", "streamUrl", "showFeedToast"]],
   [player, ["revealChrome", "bumpChrome", "setAlbumIndex", "updateDockForKind"]],
 ]) {
   for (const fn of fns) {

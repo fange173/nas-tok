@@ -1,6 +1,5 @@
 /* auth.js — 登录/改密/登出表单与角色判断(由 split_frontend.py 机械切割,勿手改顺序) */
-import { clearFeedTrack, invalidatePendingLoad, pauseAll } from './feed.js';
-import { enterFeed } from './main.js';
+import { clearFeedTrack, enterFeed, invalidatePendingLoad, pauseAll } from './feed.js';
 import { bindGlobalProgress } from './player.js';
 import { state } from './state.js';
 import { $, $$, api, showPage } from './util.js';
@@ -92,7 +91,6 @@ import { $, $$, api, showPage } from './util.js';
       state.tagged = false;
       state.tags = null;
       state.query = "";
-      state.libraryId = null;
       state.tab = "all";
       state.viewed = new Set();
       showPage("page-login");

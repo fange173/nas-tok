@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
@@ -24,7 +24,7 @@ from app.auth import (
     require_sysadmin,
     user_to_dict,
 )
-from app.database import AuditLog, Favorite, Library, ShareLink, ShareView, Tag, TagCreateRequest, TagUpdateRequest, User, UserLibrary, VideoTagAssignment, bump_credentials, ensure_default_tags, get_db, make_db_snapshot, restore_db_snapshot, utcnow, write_audit_log
+from app.database import AuditLog, Favorite, Library, ShareLink, ShareView, Tag, TagCreateRequest, TagUpdateRequest, User, UserLibrary, VideoTagAssignment, SessionLocal, bump_credentials, ensure_default_tags, get_db, make_db_snapshot, reset_db_to_factory, restore_db_snapshot, utcnow, write_audit_log
 from app.slog import slog
 from app.video_handler import (
     MEDIA_ROOT,
@@ -280,6 +280,40 @@ async def restore_db_backup(
     return {"ok": True}
 
 
+class FactoryResetRequest(BaseModel):
+    confirm: str = Field(..., min_length=1, max_length=32)
+
+
+@router.post("/reset")
+def factory_reset(
+    body: FactoryResetRequest,
+    admin: User = Depends(require_sysadmin),
+):
+    """恢复默认设置:清空全部数据并重建出厂库。重置前自动保留安全快照。"""
+    if body.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="请传入 confirm=RESET 确认重置")
+    try:
+        safety = reset_db_to_factory()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"重置失败: {exc}") from exc
+    slog("factory_reset", user=admin.username, safety=safety)
+    # 重置后 Depends 注入的旧库会话已失效;用新库会话补审计,失败不阻断重置结果
+    try:
+        with SessionLocal() as s:
+            factory_admin = s.scalar(select(User).where(User.username == "admin"))
+            write_audit_log(
+                s,
+                user=factory_admin,
+                action="admin",
+                detail=f"恢复默认设置(操作者 {admin.username};重置前快照 {os.path.basename(safety)})",
+            )
+    except Exception:
+        pass
+    return {"ok": True, "safety": os.path.basename(safety)}
+
+
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), _: User = Depends(require_staff)):
     users = db.scalars(select(User).order_by(User.id.asc())).all()
@@ -441,18 +475,16 @@ def delete_user(
     if not _can_manage_target(actor, user):
         raise HTTPException(status_code=403, detail="无权删除该用户")
     uname = user.username
-    for row in db.scalars(select(UserLibrary).where(UserLibrary.user_id == user.id)).all():
-        db.delete(row)
-    for row in db.scalars(select(Favorite).where(Favorite.user_id == user.id)).all():
-        db.delete(row)
-    for row in db.scalars(select(VideoTagAssignment).where(VideoTagAssignment.user_id == user.id)).all():
-        db.delete(row)
-    for row in db.scalars(select(Tag).where(Tag.user_id == user.id)).all():
-        db.delete(row)
-    for share in list(db.scalars(select(ShareLink).where(ShareLink.created_by == user.id)).all()):
-        for v in db.scalars(select(ShareView).where(ShareView.share_id == share.id)).all():
-            db.delete(v)
-        db.delete(share)
+    # 子表用批量 DELETE 立即落库再删父行：ShareView/ShareLink 等模型未定义
+    # relationship，ORM 逐个 delete 在同一 flush 中不保证先子后父，外键强制时会失败
+    share_ids = db.scalars(select(ShareLink.id).where(ShareLink.created_by == user.id)).all()
+    if share_ids:
+        db.execute(delete(ShareView).where(ShareView.share_id.in_(share_ids)))
+        db.execute(delete(ShareLink).where(ShareLink.id.in_(share_ids)))
+    db.execute(delete(UserLibrary).where(UserLibrary.user_id == user.id))
+    db.execute(delete(Favorite).where(Favorite.user_id == user.id))
+    db.execute(delete(VideoTagAssignment).where(VideoTagAssignment.user_id == user.id))
+    db.execute(delete(Tag).where(Tag.user_id == user.id))
     db.delete(user)
     db.commit()
     invalidate_media_access_cache(user_id=user_id)
@@ -596,8 +628,8 @@ def delete_library(
         raise HTTPException(status_code=404, detail="存储库不存在")
 
     name, path = lib.name, lib.path
-    for row in db.scalars(select(UserLibrary).where(UserLibrary.library_id == lib.id)).all():
-        db.delete(row)
+    # UserLibrary 子表先批量清理（未定义 relationship，同 flush ORM 删除不保证先子后父）
+    db.execute(delete(UserLibrary).where(UserLibrary.library_id == lib.id))
     db.delete(lib)
     db.commit()
     invalidate_scan_cache()
@@ -650,13 +682,16 @@ class ShareStatusRequest(BaseModel):
 def list_shares(
     page: int = Query(1, ge=1),
     limit: int = Query(30, ge=1, le=100),
+    path: str = Query("", description="按媒体相对路径精确过滤"),
     db: Session = Depends(get_db),
     _: User = Depends(require_staff),
 ):
-    total = db.scalar(select(func.count()).select_from(ShareLink)) or 0
+    stmt = select(ShareLink)
+    if path:
+        stmt = stmt.where(ShareLink.video_path == path)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
-        select(ShareLink)
-        .order_by(ShareLink.id.desc())
+        stmt.order_by(ShareLink.id.desc())
         .offset((page - 1) * limit)
         .limit(limit)
     ).all()
@@ -769,8 +804,9 @@ def delete_share(
     if not share:
         raise HTTPException(status_code=404, detail="分享不存在")
     path = share.video_path
-    for v in db.scalars(select(ShareView).where(ShareView.share_id == share_id)).all():
-        db.delete(v)
+    # 访问明细用批量 DELETE 立即落库：ShareView/ShareLink 未定义 relationship，
+    # ORM 逐个 delete 在同一 flush 里不保证先子后父，会触发外键约束失败
+    db.execute(delete(ShareView).where(ShareView.share_id == share_id))
     db.delete(share)
     db.commit()
     write_audit_log(db, user=admin, action="admin", detail=f"删除分享 #{share_id} {path}")
@@ -927,10 +963,8 @@ def admin_delete_tag(
     if not tag:
         raise HTTPException(status_code=404, detail="标记不存在")
     name = tag.name
-    count = 0
-    for va in db.scalars(select(VideoTagAssignment).where(VideoTagAssignment.tag_id == tag.id)).all():
-        db.delete(va)
-        count += 1
+    # 子表先批量清理（未定义 relationship，同 flush ORM 删除不保证先子后父）
+    count = db.execute(delete(VideoTagAssignment).where(VideoTagAssignment.tag_id == tag.id)).rowcount or 0
     db.delete(tag)
     db.commit()
     write_audit_log(db, user=actor, action="tag_delete", detail=f"删除用户 {user.username} 的标记: {name}（{count} 个关联已清理）")

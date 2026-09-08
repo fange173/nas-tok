@@ -15,7 +15,7 @@ NasTok turns folders of clips and pictures into an immersive feed: shuffle or ne
 - **Media modes** — video, photos, or mixed; photo albums load their images on demand.
 - **Streaming + download** — HTTP `Range` / `206` and `If-Range` for Safari/iOS; separate download action.
 - **Favorites and tags** — per-user; default tag `稍后再看` (“watch later”); `PUT` replaces the tag set atomically.
-- **Public shares** — video, photo, or album at `/s/{token}`; optional expiry, password, and max opens; revoking then sharing again issues a **new** token. Any signed-in user can share media they are allowed to see.
+- **Public shares** — video, photo, or album at `/s/{token}`; optional expiry, password, and max opens; revoking then sharing again issues a **new** token. **Staff only** (admin / sysadmin); still requires library ACL.
 - **Library ACL** — first-level folders under the media root become libraries; new users get none until a sysadmin assigns them. The built-in `admin` account always has every library.
 - **Admin** — users, libraries, audit log, share records; SQLite online backup **and restore** (sysadmin).
 - **Player extras** — resume position (local), playback speed, sidecar `.vtt`/`.srt` subtitles, Media Session keys.
@@ -105,15 +105,15 @@ Session length: 24 hours, or 90 days if “Remember me” is checked. Changing t
 
 ## Roles
 
-| Role | Browse / favorite / tag / share | Rename / delete | Users & libraries | DB backup / restore |
-|---|:---:|:---:|:---:|:---:|
-| `user` | ✅ (assigned libraries only) | ❌ | ❌ | ❌ |
-| `admin` | ✅ | ✅ | limited | ❌ |
-| `sysadmin` | ✅ | ✅ | ✅ | ✅ |
+| Role | Browse / favorite / tag | Share | Rename / delete | Users & libraries | DB backup / restore |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `user` | ✅ (assigned libraries only) | ❌ | ❌ | ❌ | ❌ |
+| `admin` | ✅ | ✅ | ✅ | limited | ❌ |
+| `sysadmin` | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 - Built-in `admin` is always `sysadmin` and is granted every library on startup.
 - New users start with **no** libraries.
-- Share / rename / delete still require library ACL on the file path.
+- Share is **staff only** and still requires library ACL on the file path. Rename / delete also require library ACL.
 - Backup and restore are **sysadmin only** (`POST /api/admin/backup`, `POST /api/admin/restore`).
 
 ## Layout

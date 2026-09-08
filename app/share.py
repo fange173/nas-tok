@@ -16,7 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -252,8 +252,8 @@ def _dedupe_shares_for_path(db: Session, rel: str) -> Optional[ShareLink]:
     for extra in rows:
         if extra.id == primary.id:
             continue
-        for v in db.scalars(select(ShareView).where(ShareView.share_id == extra.id)).all():
-            db.delete(v)
+        # 访问明细先批量删除（未定义 relationship，同 flush 不保证先子后父）
+        db.execute(delete(ShareView).where(ShareView.share_id == extra.id))
         db.delete(extra)
     if len(rows) > 1:
         db.flush()
@@ -312,6 +312,8 @@ def create_share(
     db: Session = Depends(get_db),
     user: User = Depends(require_password_ok),
 ):
+    if not is_staff(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅管理员可分享")
     rel = body.path.strip().replace("\\", "/")
     if not user_can_access_media_path(db, user.id, rel):
         raise HTTPException(status_code=403, detail="无权分享该媒体(未分配对应存储库)")

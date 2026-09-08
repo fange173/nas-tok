@@ -1,44 +1,112 @@
 /* feed.js — Feed 列表/播放/滑动/轮滚/键盘/帮助(由 split_frontend.py 机械切割,勿手改顺序) */
 import { openAdmin } from './admin.js';
-import { isStaff } from './auth.js';
-import { openEditModal } from './edit-modal.js';
+import { isStaff, isSysadmin } from './auth.js';
 import { ERROR_ICON, ICON, PLAY_ICON } from './icons.js';
-import { bindGlobalProgress, bindMediaSession, bumpChrome, ensureAlbumImages, exitImmersive, fillAlbumTrack, getCurrentVideo, resumeWatchPos, revealChrome, saveWatchPos, setAlbumIndex, setMediaMode, setPlaybackRate, setProgressUI, setSort, syncMediaLabel, updateAlbumProgress, updateDockForKind } from './player.js';
+import { bindGlobalProgress, bindMediaSession, bumpChrome, ensureAlbumImages, exitImmersive, fillAlbumTrack, getCurrentVideo, resumeWatchPos, revealChrome, saveWatchPos, setAlbumIndex, setMediaMode, setPlaybackRate, setPlayMode, setProgressUI, setDockTitle, syncMediaLabel, updateAlbumProgress, updateDockForKind } from './player.js';
 import { setShareMenuItem, shareVideo, unshareVideo } from './share-page.js';
 import { MEDIA_MODES, NEXT_PAGE_PREFETCH_THRESHOLD, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, state } from './state.js';
-import { openTagModal } from './tags.js';
-import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './util.js';
+import { openTagModal, refreshTagCache } from './tags.js';
+import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPage } from './util.js';
 
     /* ---------- Feed 标签 / 排序 ---------- */
-    $$(".feed-tabs button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        if (btn.dataset.tab === state.tab) return;
-        $$(".feed-tabs button").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        state.tab = btn.dataset.tab;
-        state.seed = null;
-        resetAndLoad();
-      });
-    });
+    const KIND_LABEL = { video: "视频", image: "图片", album: "相册" };
 
-    $$(".sort-switch button").forEach((btn) => {
-      btn.addEventListener("click", () => setSort(btn.dataset.sort, true));
-    });
-    $("#menu-sort-btn")?.addEventListener("click", () => {
-      setSort(state.sort === "newest" ? "random" : "newest", true);
-    });
+    /** 登录后进入 Feed：装配入口可见性并首次加载（供 main.js/auth.js 调用） */
+    export function enterFeed() {
+      $("#admin-link").classList.toggle("hidden", !isStaff());
+      $("#admin-link-m")?.classList.toggle("hidden", !isStaff());
+      $("#backup-download-btn")?.classList.toggle("hidden", !isSysadmin());
+      $("#backup-restore-label")?.classList.toggle("hidden", !isSysadmin());
+      showPage("page-feed");
+      setPlayMode(state.playMode, false);
+      state.tagId = null;
+      state.tagged = false;
+      resetAndLoad();
+      refreshTagCache().catch(() => {});
+      if (!lsGet("nastok_help_hint")) {
+        lsSet("nastok_help_hint", "1");
+        setTimeout(() => showFeedToast("按 ? 或点击顶栏「?」查看快捷键", 3200), 800);
+      }
+    }
+
+    /** 由 state 推导下拉框当前值：tag:{id} / __all__ / fav / all */
+    export function currentTabValue() {
+      if (state.tagId) return `tag:${state.tagId}`;
+      if (state.tagged) return "__all__";
+      return state.tab === "fav" ? "fav" : "all";
+    }
+
+    export function syncFeedTabSelect() {
+      const sel = $("#feed-tab-select");
+      if (sel) sel.value = currentTabValue();
+    }
+
+    function applyTabSelect(val) {
+      if (val === "all" || val === "fav") {
+        state.tab = val;
+        state.tagId = null;
+        state.tagged = false;
+      } else if (val === "__all__") {
+        state.tab = null;
+        state.tagId = null;
+        state.tagged = true;
+      } else if (val.startsWith("tag:")) {
+        state.tab = null;
+        state.tagId = Number(val.slice(4)) || null;
+        state.tagged = false;
+      } else {
+        return;
+      }
+      // 任何筛选切换都退出搜索结果态
+      state.query = "";
+      state.seed = null;
+      resetAndLoad();
+    }
+    $("#feed-tab-select")?.addEventListener("change", (e) => applyTabSelect(e.target.value));
+
+    // 存储库切换：全部存储库 或 单一存储库；切库后回到“全部”筛选并重载
+    export function switchLibrary(id) {
+      const n = id ? Number(id) : null;
+      if (n === state.libraryId) return;
+      state.libraryId = n || null;
+      lsSet("nastok_library", state.libraryId ? String(state.libraryId) : "");
+      state.tab = "all";
+      state.tagId = null;
+      state.tagged = false;
+      state.query = "";
+      state.seed = null;
+      syncFeedTabSelect();
+      resetAndLoad();
+    }
+    export async function refreshLibraryOptions() {
+      const sel = $("#library-select");
+      if (!sel) return;
+      try {
+        const data = await api("/api/libraries");
+        const libs = Array.isArray(data.items) ? data.items : [];
+        sel.innerHTML =
+          '<option value="">全部存储库</option>' +
+          libs.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join("");
+        sel.value = state.libraryId ? String(state.libraryId) : "";
+      } catch (_) { /* 下拉取库失败不阻塞，保持“全部存储库” */ }
+    }
+    $("#library-select")?.addEventListener("change", (e) => switchLibrary(e.target.value));
+    $("#settings-btn")?.addEventListener("click", () => refreshLibraryOptions());
+
     $("#media-mode-btn")?.addEventListener("click", () => {
       const i = MEDIA_MODES.indexOf(state.mediaMode);
       const next = MEDIA_MODES[(i + 1) % MEDIA_MODES.length];
       setMediaMode(next, true);
     });
-    $("#menu-media-btn")?.addEventListener("click", () => {
-      const i = MEDIA_MODES.indexOf(state.mediaMode);
-      const next = MEDIA_MODES[(i + 1) % MEDIA_MODES.length];
-      setMediaMode(next, true);
+
+    // 播放顺序三态循环：顺序 → 随机 → 单个循环
+    const PLAY_MODE_NEXT = { order: "random", random: "loop", loop: "order" };
+    $("#dock-sort-btn")?.addEventListener("click", () => {
+      setPlayMode(PLAY_MODE_NEXT[state.playMode] || "order", true);
     });
-    $("#menu-refresh-btn")?.addEventListener("click", () => {
-      $("#refresh-btn").click();
+    $("#dock-mute-btn")?.addEventListener("click", () => {
+      revealChrome();
+      $("#mute-btn").click();
     });
 
     // 顶栏下拉菜单（PC 一个，移动端功能/账户两个），互斥开合
@@ -70,7 +138,6 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
     $$(".top-more > .top-more-btn").forEach((btn) => btn.addEventListener("click", toggleTopMore));
     $$(".top-more-panel").forEach((panel) => {
       panel.addEventListener("click", (e) => {
-        // 点菜单项后收起
         if (e.target.closest("button, a")) closeTopMore();
       });
     });
@@ -79,10 +146,11 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       closeTopMore();
     });
 
-    export function showFeedToast(msg, ms) {
+    export function showFeedToast(msg, ms, compact) {
       const el = $("#feed-toast");
       if (!el) return;
       el.textContent = msg;
+      el.classList.toggle("compact", !!compact);
       el.classList.add("show");
       clearTimeout(el._t);
       el._t = setTimeout(() => el.classList.remove("show"), ms || 2200);
@@ -158,11 +226,10 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
           if (state.sort === "random" && state.seed) qs.set("seed", state.seed);
           if (forceRefresh) qs.set("refresh", "true");
           if (state.tab === "fav") qs.set("favorites", "true");
-          if (state.tab === "recent") qs.set("recent", "true");
           if (state.tagId) qs.set("tag_id", String(state.tagId));
           else if (state.tagged) qs.set("tagged", "true");
-          if (state.query) qs.set("q", state.query);
           if (state.libraryId) qs.set("library_id", String(state.libraryId));
+          if (state.query) qs.set("q", state.query);
           const data = await api(`/api/videos/list?${qs}`);
           // 已被刷新/切 Tab 作废
           if (myGen !== state.loadGen) return data;
@@ -326,22 +393,21 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       const actions = $("#feed-empty-actions");
       box.classList.remove("hidden");
       actions.innerHTML = "";
-      if (state.tab === "recent") {
-        title.textContent = "还没有观看记录";
-        sub.textContent = "看过的视频会出现在这里";
-      } else if (state.query) {
+      if (state.query) {
         title.textContent = "没有匹配的内容";
         sub.textContent = `没有找到「${state.query}」`;
       } else if (state.tab === "fav") {
         title.textContent = "还没有喜欢的视频";
-        sub.textContent = "播放时点击右侧心形即可收藏，之后可在这里连续观看";
+        sub.textContent = "播放时点开底部「更多」即可喜欢，之后可在这里连续观看";
         const go = document.createElement("button");
         go.type = "button";
         go.className = "btn btn-primary btn-sm";
         go.textContent = "去推荐看看";
         go.addEventListener("click", () => {
-          $$(".feed-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === "all"));
           state.tab = "all";
+          state.tagId = null;
+          state.tagged = false;
+          syncFeedTabSelect();
           state.seed = null;
           resetAndLoad();
         });
@@ -364,7 +430,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         refresh.type = "button";
         refresh.className = "btn btn-ghost btn-sm";
         refresh.textContent = "重新扫描";
-        refresh.addEventListener("click", () => $("#refresh-btn").click());
+        refresh.addEventListener("click", () => doPullRefresh());
         actions.appendChild(refresh);
       }
     }
@@ -406,7 +472,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
           btn.classList.remove("active");
           btn.innerHTML = ICON.heart(false);
           if (state.videos[idx]) state.videos[idx].favorited = false;
-          showFeedToast("已取消收藏", 1400);
+          showFeedToast("已取消喜欢", 1400);
           if (state.tab === "fav") removeSlideAt(idx);
         } else {
           await api("/api/favorites", {
@@ -419,139 +485,158 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
           showFeedToast("已加入喜欢", 1400);
         }
       } catch (ex) {
-        showFeedToast(ex.message || "收藏操作失败", 2500);
+        showFeedToast(ex.message || "喜欢操作失败", 2500);
       } finally {
         btn.disabled = false;
         delete state._favInflight[path];
       }
     }
 
-    export function attachSlideSide(slide, v, { showMute }) {
-      const side = document.createElement("div");
-      side.className = "side-actions";
-      // 重命名后 state.videos[i] 会被替换为新对象（patchSlide 不重建 slide），
-      // 点击时按 slide 当前 index 现取条目，避免闭包持有旧对象按旧路径请求
-      const liveItem = () => state.videos[Number(slide.dataset.index)] || v;
+    /* ---------- 右下角操作区：更多菜单 + 信息弹窗 ---------- */
 
-      const favBtn = document.createElement("button");
-      favBtn.type = "button";
-      favBtn.className = "btn-icon fav-btn" + (v.favorited ? " active" : "");
-      favBtn.setAttribute("aria-label", v.favorited ? "取消收藏" : "收藏");
-      favBtn.setAttribute("aria-pressed", v.favorited ? "true" : "false");
-      favBtn.innerHTML = ICON.heart(!!v.favorited);
-      favBtn.addEventListener("click", (ev) => {
+    function closeDockMenu() {
+      $("#dock-more-menu")?.classList.add("hidden");
+      $("#dock-more-btn")?.setAttribute("aria-expanded", "false");
+    }
+
+    /** 每次打开按当前条目重建菜单：喜欢 / 标记 / 信息 / 分享 */
+    function openDockMenu() {
+      const menu = $("#dock-more-menu");
+      const v = currentItem();
+      if (!menu) return;
+      if (!v) return;
+      menu.innerHTML = "";
+
+      const mkItem = (tag, cls) => {
+        const el = document.createElement(tag);
+        if (cls) el.className = cls;
+        return el;
+      };
+
+      const favItem = mkItem("button", "side-more-item");
+      favItem.type = "button";
+      favItem.innerHTML = `${ICON.heart(!!v.favorited)}<span>${v.favorited ? "已喜欢" : "喜欢"}</span>`;
+      favItem.addEventListener("click", async (ev) => {
         ev.stopPropagation();
-        revealChrome();
-        toggleFavorite(liveItem(), favBtn, Number(slide.dataset.index));
+        closeDockMenu();
+        const btn = document.createElement("button");
+        btn.className = "btn-icon fav-btn" + (v.favorited ? " active" : "");
+        await toggleFavorite(state.videos[state.index], btn, state.index);
       });
-      const favLabel = document.createElement("span");
-      favLabel.className = "side-label";
-      favLabel.textContent = "收藏";
-      side.append(favBtn, favLabel);
+      menu.appendChild(favItem);
 
-      const tagBtn = document.createElement("button");
-      tagBtn.type = "button";
-      tagBtn.className = "btn-icon tag-btn";
-      tagBtn.innerHTML = ICON.tag(false);
-      tagBtn.title = "标记";
-      tagBtn.setAttribute("aria-label", "标记");
-      tagBtn.addEventListener("click", (ev) => {
+      const tagItem = mkItem("button", "side-more-item");
+      tagItem.type = "button";
+      tagItem.innerHTML = `${ICON.tag(false)}<span>标记</span>`;
+      tagItem.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        revealChrome();
-        openTagModal(liveItem());
+        closeDockMenu();
+        openTagModal(currentItem());
       });
-      const tagLabel = document.createElement("span");
-      tagLabel.className = "side-label";
-      tagLabel.textContent = "标记";
-      side.append(tagBtn, tagLabel);
+      menu.appendChild(tagItem);
 
-      if (showMute) {
-        const muteSide = document.createElement("button");
-        muteSide.type = "button";
-        muteSide.className = "btn-icon side-mute-btn" + (state.muted ? " is-muted" : "");
-        muteSide.innerHTML = state.muted ? ICON.mute() : ICON.volume();
-        muteSide.title = state.muted ? "取消静音" : "静音";
-        muteSide.setAttribute("aria-label", muteSide.title);
-        muteSide.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          revealChrome();
-          $("#mute-btn").click();
-        });
-        const muteLabel = document.createElement("span");
-        muteLabel.className = "side-label side-mute-label";
-        muteLabel.textContent = "声音";
-        side.append(muteSide, muteLabel);
-      }
-
-      const moreWrap = document.createElement("div");
-      moreWrap.className = "side-more";
-      const moreBtn = document.createElement("button");
-      moreBtn.type = "button";
-      moreBtn.className = "btn-icon side-more-btn";
-      moreBtn.title = "更多";
-      moreBtn.setAttribute("aria-label", "更多");
-      moreBtn.innerHTML = ICON.more();
-      const moreMenu = document.createElement("div");
-      moreMenu.className = "side-more-menu hidden";
-
-      if (itemKind(v) !== "album") {
-        const downloadItem = document.createElement("a");
-        downloadItem.className = "side-more-item";
-        downloadItem.href = downloadUrl(v);
-        downloadItem.download = (v.path || "").split("/").pop() || "";
-        downloadItem.innerHTML = `${ICON.download()}<span>下载</span>`;
-        downloadItem.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          moreMenu.classList.add("hidden");
-        });
-        moreMenu.appendChild(downloadItem);
-      }
-
-      const shareItem = document.createElement("button");
-      shareItem.type = "button";
-      shareItem.className = "side-more-item";
-      shareItem.dataset.sharePath = v.path;
-      setShareMenuItem(shareItem, !!v.shared);
-      shareItem.addEventListener("click", async (ev) => {
+      const infoItem = mkItem("button", "side-more-item");
+      infoItem.type = "button";
+      infoItem.innerHTML = `${ICON.info()}<span>信息</span>`;
+      infoItem.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        moreMenu.classList.add("hidden");
-        const currentlyShared = shareItem.dataset.shared === "1";
-        if (currentlyShared) {
-          await unshareVideo(liveItem());
-        } else {
-          await shareVideo(liveItem());
-        }
+        closeDockMenu();
+        openInfoModal(currentItem());
       });
-      moreMenu.appendChild(shareItem);
+      menu.appendChild(infoItem);
 
       if (isStaff()) {
-        const editItem = document.createElement("button");
-        editItem.type = "button";
-        editItem.className = "side-more-item";
-        editItem.innerHTML = `${ICON.edit()}<span>编辑</span>`;
-        editItem.addEventListener("click", (ev) => {
+        const shareItem = mkItem("button", "side-more-item");
+        shareItem.type = "button";
+        setShareMenuItem(shareItem, !!v.shared);
+        shareItem.addEventListener("click", async (ev) => {
           ev.stopPropagation();
-          moreMenu.classList.add("hidden");
-          openEditModal(liveItem(), Number(slide.dataset.index));
+          closeDockMenu();
+          const cur = currentItem();
+          if (!cur) return;
+          if (shareItem.dataset.shared === "1") await unshareVideo(cur);
+          else await shareVideo(cur);
         });
-        moreMenu.appendChild(editItem);
+        menu.appendChild(shareItem);
       }
 
-      moreBtn.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        revealChrome();
-        const open = moreMenu.classList.contains("hidden");
-        $$(".side-more-menu").forEach((m) => m.classList.add("hidden"));
-        moreMenu.classList.toggle("hidden", !open);
-        moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
-      });
-      moreWrap.append(moreBtn, moreMenu);
-      const moreLabel = document.createElement("span");
-      moreLabel.className = "side-label side-mute-label";
-      moreLabel.textContent = "更多";
-      side.append(moreWrap, moreLabel);
-      slide.appendChild(side);
+      menu.classList.remove("hidden");
+      $("#dock-more-btn").setAttribute("aria-expanded", "true");
     }
+
+    $("#dock-more-btn")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      revealChrome();
+      const menu = $("#dock-more-menu");
+      if (menu.classList.contains("hidden")) openDockMenu();
+      else closeDockMenu();
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#dock-more")) closeDockMenu();
+    });
+
+    export function openInfoModal(v) {
+      if (!v) return;
+      const kind = itemKind(v);
+      $("#info-modal-title").textContent = v.title || (v.path || "").split("/").pop() || "媒体信息";
+      const rows = [
+        ["类型", KIND_LABEL[kind] || "视频"],
+        ["路径", v.path || "—"],
+        ["存储库", v.library || "—"],
+        ["修改时间", fmtDateTime(v.mtime_iso || v.mtime)],
+      ];
+      if (kind === "album") rows.push(["图片数", String(albumImageCount(v))]);
+      if (isStaff()) rows.push(["分享", v.shared ? "已分享" : "未分享"]);
+      $("#info-modal-rows").innerHTML = rows
+        .map(([k, val]) => `<div class="info-row"><span>${k}</span><b>${escapeHtml(String(val))}</b></div>`)
+        .join("");
+      const dl = $("#info-modal-download");
+      if (kind === "album") {
+        dl.classList.add("hidden");
+      } else {
+        dl.classList.remove("hidden");
+        dl.href = downloadUrl(v);
+        dl.setAttribute("download", (v.path || "").split("/").pop() || "");
+      }
+      fillShareDetail(v);
+      $("#info-modal").classList.add("open");
+    }
+
+    /** 已分享（staff）时在信息弹窗底部补充分享详情：链接 / 有效期 / 密码 / 访问数 */
+    async function fillShareDetail(v) {
+      const holder = $("#info-modal-share-detail");
+      if (!holder) return;
+      if (!isStaff() || !v.shared) {
+        holder.innerHTML = "";
+        return;
+      }
+      holder.innerHTML = '<div class="info-row"><span>链接</span><b>加载中…</b></div>';
+      try {
+        const qs = new URLSearchParams({ path: v.path || "", limit: "5" });
+        const data = await api(`/api/admin/shares?${qs}`);
+        const s = (data.items || []).find((it) => it.is_active) || (data.items || [])[0];
+        if (!s) {
+          holder.innerHTML = "";
+          return;
+        }
+        const abs = location.origin + s.url;
+        const bits = [`<a href="${escapeHtml(abs)}" target="_blank" rel="noopener" class="info-share-link">${escapeHtml(abs)}</a>`];
+        bits.push(`访问 ${s.view_count} 次`);
+        bits.push(s.expires_at ? `有效期至 ${escapeHtml(s.expires_at)}` : "永久有效");
+        if (s.has_password) bits.push("需密码访问");
+        if (!s.is_active) bits.push("已停用");
+        holder.innerHTML = `<div class="info-row"><span>链接</span><b>${bits.join("<br>")}</b></div>`;
+      } catch (_) {
+        holder.innerHTML = "";
+      }
+    }
+    $("#info-modal-close")?.addEventListener("click", () => {
+      $("#info-modal").classList.remove("open");
+    });
+    $("#info-modal")?.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
+    });
+
 
     export function buildStillSlide(slide, v, i, kind) {
       const pauseInd = document.createElement("div");
@@ -599,10 +684,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
 
       const meta = document.createElement("div");
       meta.className = "video-meta";
-      const sub = kind === "album"
-        ? `${escapeHtml(v.library)} · ${albumImageCount(v)} 张 · ${escapeHtml(fmtDateTime(v.mtime_iso || v.mtime))}`
-        : `${escapeHtml(v.library)} · ${escapeHtml(fmtDateTime(v.mtime_iso || v.mtime))}`;
-      meta.innerHTML = `<h2>${escapeHtml(v.title)}</h2><p>${sub}</p>`;
+      meta.innerHTML = `<h2>${escapeHtml(v.title)}</h2>`;
 
       const zones = document.createElement("div");
       zones.className = "tap-zones";
@@ -638,7 +720,6 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       right.addEventListener("click", onStillTap("right"));
 
       slide.append(pauseInd, zones, meta);
-      attachSlideSide(slide, v, { showMute: false });
     }
 
     // 视频 slide 的完整构建（含全部事件绑定）；供 renderSlides 与 ensureSlide 复用
@@ -665,6 +746,12 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
 
         video.addEventListener("ended", () => {
           if (String(state.index) !== slide.dataset.index) return;
+          // 单个循环：播完当前重播
+          if (state.playMode === "loop") {
+            video.currentTime = 0;
+            video.play().catch(() => {});
+            return;
+          }
           // 最后一条且没有更多：循环当前；否则切下一条
           if (!state.hasMore && state.index >= state.videos.length - 1) {
             video.currentTime = 0;
@@ -761,12 +848,14 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         });
         video.addEventListener("waiting", () => {
           if (!eventGenOk()) return;
+          if (state.scrubbing) { hideNetBadge(); return; }
           if (canSoftWarn()) showNetBadge();
           else showLoader("缓冲中…");
           updatePauseIndicator(slide, video);
         });
         video.addEventListener("stalled", () => {
           if (!eventGenOk()) return;
+          if (state.scrubbing) { hideNetBadge(); return; }
           if (canSoftWarn()) showNetBadge();
           else showLoader("网络不稳…");
         });
@@ -822,7 +911,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
 
         const meta = document.createElement("div");
         meta.className = "video-meta";
-        meta.innerHTML = `<h2>${escapeHtml(v.title)}</h2><p>${escapeHtml(v.library)} · ${escapeHtml(fmtDateTime(v.mtime_iso || v.mtime))}</p>`;
+        meta.innerHTML = `<h2>${escapeHtml(v.title)}</h2>`;
 
         const zones = document.createElement("div");
         zones.className = "tap-zones";
@@ -887,7 +976,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
           clearTimeout(state.longPressTimer);
           if (state.isFastForward) {
             state.isFastForward = false;
-            video.playbackRate = 1;
+            video.playbackRate = state.playbackRate || 1;
             $("#speed-toast").classList.remove("show");
             // 松手后的 click 会误触发暂停，短暂屏蔽
             state.ignoreTapUntil = Date.now() + 450;
@@ -912,7 +1001,6 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         }, { passive: true });
 
         slide.append(video, pauseInd, loader, netBadge, errBox, zones, meta);
-        attachSlideSide(slide, v, { showMute: true });
         updatePauseIndicator(slide, video);
       }
     }
@@ -1074,6 +1162,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
     export function goTo(idx, animate) {
       if (idx < 0 || idx >= state.videos.length) return;
       state.index = idx;
+      closeDockMenu();
       const track = $("#feed-track");
       if (!animate) track.style.transition = "none";
       track.style.transform = `translateY(${-idx * 100}%)`;
@@ -1194,10 +1283,12 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         bindGlobalProgress(null);
         state.currentVideo = null;
         updateDockForKind("video");
+        setDockTitle("");
         return;
       }
       const kind = itemKind(info);
       updateDockForKind(kind);
+      setDockTitle(info.title || "");
 
       // 只暂停上一条视频
       if (state.currentVideo) {
@@ -1347,7 +1438,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         state._swipeLock = true;
         goTo(state.index + 1, true);
         playCurrent();
-        setTimeout(() => { state._swipeLock = false; }, 280);
+        setTimeout(() => { state._swipeLock = false; }, 180);
         return;
       }
 
@@ -1358,7 +1449,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         const total = state.total || state.videos.length;
         showFeedToast(
           total
-            ? `已经是最后一个视频了（共 ${total} 个）\n可点「刷新」或切换「最新/随机」重新开始`
+            ? `已经是最后一个视频了（共 ${total} 个）\n可在播放顺序里选「随机」重新开始`
             : "没有更多视频了",
           2800
         );
@@ -1373,7 +1464,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
           state._swipeLock = true;
           goTo(state.index + 1, true);
           playCurrent();
-          setTimeout(() => { state._swipeLock = false; }, 280);
+          setTimeout(() => { state._swipeLock = false; }, 180);
         } else if (state.videos.length === before || !state.hasMore) {
           const total = state.total || state.videos.length;
           state.hasMore = false;
@@ -1396,7 +1487,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         state._swipeLock = true;
         goTo(state.index - 1, true);
         playCurrent();
-        setTimeout(() => { state._swipeLock = false; }, 280);
+        setTimeout(() => { state._swipeLock = false; }, 180);
         return;
       }
       goTo(state.index, true);
@@ -1425,7 +1516,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
     // 统一 Pointer：手机滑动 + 桌面拖拽切换
     viewport.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (e.target.closest(".side-actions, .bottom-dock, .top-bar, .help-overlay, .exit-immersive-btn, button, a, select, input, .progress-bar")) return;
+      if (e.target.closest(".dock-actions, .bottom-dock, .top-bar, .help-overlay, .exit-immersive-btn, button, a, select, input, .progress-bar")) return;
       if (state._swipeLock) return;
       state.dragging = true;
       state._dragCommitted = false;
@@ -1441,7 +1532,11 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       state._onAlbum = itemKind(cur) === "album" && !!e.target.closest(".video-slide");
       state._albumAxis = null;
       state._albumFeedIdx = state._onAlbum ? state.index : -1;
-      try { viewport.setPointerCapture(e.pointerId); } catch (_) {}
+      // 仅对鼠标做 pointer capture：触摸指针在 iOS Safari 等上调用 setPointerCapture
+      // 会吞掉同一手势后续的 pointermove，导致拖动位移无法累积、松手回弹
+      if (e.pointerType !== "touch") {
+        try { viewport.setPointerCapture(e.pointerId); } catch (_) {}
+      }
     });
 
     // 移动端长按禁止系统选中/呼出菜单
@@ -1460,13 +1555,13 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       // 相册：先判定横/竖轴，横向翻图时不触发纵向 feed 滑动
       if (state._onAlbum && !state._albumAxis) {
         if (Math.abs(dxTotal) > 10 || Math.abs(dyTotal) > 10) {
-          state._albumAxis = Math.abs(dxTotal) > Math.abs(dyTotal) ? "h" : "v";
+          state._albumAxis = Math.abs(dxTotal) > Math.abs(dyTotal) * 1.15 ? "h" : "v";
           if (state._albumAxis === "h") {
             clearTimeout(state.longPressTimer);
             if (state.isFastForward) {
               state.isFastForward = false;
               const video = getCurrentVideo();
-              if (video) video.playbackRate = 1;
+              if (video) video.playbackRate = state.playbackRate || 1;
               $("#speed-toast").classList.remove("show");
             }
           }
@@ -1502,7 +1597,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         if (state.isFastForward) {
           state.isFastForward = false;
           const video = getCurrentVideo();
-          if (video) video.playbackRate = 1;
+          if (video) video.playbackRate = state.playbackRate || 1;
           $("#speed-toast").classList.remove("show");
         }
         trackEl.classList.add("dragging");
@@ -1513,6 +1608,22 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       const pct = -state.index * 100 + (state.dragY / h) * 100;
       trackEl.style.transform = `translateY(${pct}%)`;
     });
+
+    async function doPullRefresh() {
+      if (state._pullRefreshing) return;
+      state._pullRefreshing = true;
+      showFeedToast("正在刷新…", 1400);
+      try {
+        await api("/api/videos/refresh", { method: "POST" });
+        state.seed = null;
+        await resetAndLoad(true);
+        showFeedToast(`已刷新，共 ${state.total ?? 0} 个媒体`, 2000);
+      } catch (ex) {
+        showFeedToast(ex.message || "刷新失败", 2400);
+      } finally {
+        state._pullRefreshing = false;
+      }
+    }
 
     export function endPointerDrag(e) {
       if (!state.dragging || (e && e.pointerId != null && e.pointerId !== state._pointerId)) return;
@@ -1527,7 +1638,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
       if (state.isFastForward) {
         state.isFastForward = false;
         const video = getCurrentVideo();
-        if (video) video.playbackRate = 1;
+        if (video) video.playbackRate = state.playbackRate || 1;
         $("#speed-toast").classList.remove("show");
         state.ignoreTapUntil = Date.now() + 450;
       }
@@ -1563,9 +1674,11 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         // 停顿过久则忽略速度，避免“滑一点停住又误切”
         const idle = performance.now() - (state._lastT || 0);
         const vy = idle > 120 ? 0 : (state._velocity || 0);
-        if (state.dragY < -distThreshold || vy < -velThreshold) nextVideo();
-        else if (state.dragY > distThreshold || vy > velThreshold) prevVideo();
-        else {
+        if (state.dragY < -distThreshold || vy < -velThreshold) {
+          nextVideo();
+        } else if (state.dragY > distThreshold || vy > velThreshold) {
+          prevVideo();
+        } else {
           goTo(state.index, true);
           playCurrent();
         }
@@ -1615,6 +1728,11 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, showPage } from './u
         if (document.querySelector(".top-more.open")) {
           e.preventDefault();
           closeTopMore();
+          return;
+        }
+        if (!$("#dock-more-menu").classList.contains("hidden")) {
+          e.preventDefault();
+          closeDockMenu();
           return;
         }
         if (state.immersive) {

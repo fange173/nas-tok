@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, s
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, select, text as sa_text
+from sqlalchemy import and_, delete, func, or_, select, text as sa_text
 from sqlalchemy.orm import Session
 
 from app.admin import router as admin_router
@@ -156,8 +156,8 @@ def _repoint_shares(db: Session, old: str, new: str, title: Optional[str] = None
     for share in list(db.scalars(select(ShareLink).where(ShareLink.video_path == old)).all()):
         clash = db.scalar(select(ShareLink).where(ShareLink.video_path == new))
         if clash and clash.id != share.id:
-            for v in db.scalars(select(ShareView).where(ShareView.share_id == share.id)).all():
-                db.delete(v)
+            # 访问明细先批量删除（未定义 relationship，同 flush 不保证先子后父）
+            db.execute(delete(ShareView).where(ShareView.share_id == share.id))
             db.delete(share)
         else:
             share.video_path = new
@@ -362,7 +362,7 @@ def list_videos(
     limit: int = Query(10, ge=1, le=50),
     seed: Optional[str] = Query(None, min_length=4, max_length=64),
     refresh: bool = Query(False),
-    favorites: bool = Query(False, description="仅收藏"),
+    favorites: bool = Query(False, description="仅喜欢"),
     media_mode: str = Query("video", pattern="^(video|mixed|images)$"),
     tag_id: Optional[int] = Query(None, ge=1, description="仅该标记的媒体"),
     tagged: bool = Query(False, description="仅已打标媒体（任意标记）"),
@@ -600,10 +600,8 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db), user: User = Depends(
     if not tag:
         raise HTTPException(status_code=404, detail="标记不存在")
     name = tag.name
-    count = 0
-    for va in db.scalars(select(VideoTagAssignment).where(VideoTagAssignment.tag_id == tag.id)).all():
-        db.delete(va)
-        count += 1
+    # 子表先批量清理（未定义 relationship，同 flush ORM 删除不保证先子后父）
+    count = db.execute(delete(VideoTagAssignment).where(VideoTagAssignment.tag_id == tag.id)).rowcount or 0
     db.delete(tag)
     db.commit()
     write_audit_log(db, user=user, action="tag_delete", detail=f"删除标记: {name}（{count} 个关联已清理）")
@@ -837,9 +835,10 @@ def video_delete(
     for fav in favs:
         db.delete(fav)
     shares = list(db.scalars(select(ShareLink).where(_path_exact_or_under(ShareLink.video_path, deleted))).all())
+    if shares:
+        # 访问明细先批量删除（未定义 relationship，同 flush 不保证先子后父）
+        db.execute(delete(ShareView).where(ShareView.share_id.in_([s.id for s in shares])))
     for share in shares:
-        for v in db.scalars(select(ShareView).where(ShareView.share_id == share.id)).all():
-            db.delete(v)
         db.delete(share)
     tag_assignments = list(db.scalars(select(VideoTagAssignment).where(_path_exact_or_under(VideoTagAssignment.video_path, deleted))).all())
     for va in tag_assignments:

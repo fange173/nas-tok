@@ -1,5 +1,5 @@
 /* player.js — 音量/画面适配/沉浸模式/全局进度条 + 事件绑定(由 split_frontend.py 机械切割,勿手改顺序) */
-import { closeTopMore, nextVideo, prevVideo, resetAndLoad, streamUrl, syncDesktopPlayerControls, togglePlayPause } from './feed.js';
+import { closeTopMore, nextVideo, prevVideo, resetAndLoad, showFeedToast, streamUrl, syncDesktopPlayerControls, togglePlayPause } from './feed.js';
 import { ICON, MEDIA_MODE_ICON, MEDIA_MODE_LABEL } from './icons.js';
 import { MEDIA_MODES, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, state } from './state.js';
 import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
@@ -19,12 +19,13 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
         btn.title = title;
         btn.setAttribute("aria-label", title);
       }
-      $$(".side-mute-btn").forEach((b) => {
-        b.innerHTML = icon;
-        b.title = title;
-        b.setAttribute("aria-label", title);
-        b.classList.toggle("is-muted", !!state.muted);
-      });
+      const dockMute = $("#dock-mute-btn");
+      if (dockMute) {
+        dockMute.innerHTML = icon;
+        dockMute.title = title;
+        dockMute.setAttribute("aria-label", title);
+        dockMute.classList.toggle("is-muted", !!state.muted);
+      }
     }
 
     export function syncScrubTime(cur, dur) {
@@ -44,10 +45,20 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
     }
 
     export function updateDockForKind(kind) {
-      const vol = document.querySelector("#bottom-dock .vol-wrap");
-      if (vol) vol.classList.toggle("hidden", kind !== "video");
+      // 图片也保留音量控件（视觉常驻、布局稳定）；音量操作仅对视频生效(handler 按 kind 守卫)
+      const dockMute = $("#dock-mute-btn");
+      if (dockMute) {
+        dockMute.disabled = kind !== "video";
+        dockMute.title = kind === "video" ? (state.muted ? "取消静音" : "静音") : "图片无声音";
+      }
       const page = $("#page-feed");
       if (page) page.classList.toggle("is-media-still", kind !== "video");
+    }
+
+    // 底栏左下角标题（PC 端显示，替代 slide 内的 video-meta）
+    export function setDockTitle(title) {
+      const el = $("#dock-title");
+      if (el) el.textContent = title || "";
     }
 
     // 合集图片按需加载：列表接口不再内联 images，首次用到时拉取并缓存回 state.videos
@@ -107,19 +118,9 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
           albumTrack.style.transition = "";
           albumTrack.style.transform = `translateX(${-i * 100}%)`;
         }
-        // 更新合集页码指示器
-        let indicator = slide.querySelector(".album-page-indicator");
-        if (count > 1) {
-          if (!indicator) {
-            indicator = document.createElement("div");
-            indicator.className = "album-page-indicator";
-            slide.appendChild(indicator);
-          }
-          indicator.textContent = `${i + 1} / ${count}`;
-        } else if (indicator) {
-          indicator.remove();
-        }
       }
+      // 只在相册是当前条目时写全局进度/页码；构建非当前相册 slide 时不得覆盖当前条目显示
+      if (!slide || String(slide.dataset.index) !== String(state.index)) return;
       setProgressUI(count ? ((i + 1) / count) * 100 : 0);
       syncMediaLabel(i + 1, count);
     }
@@ -206,14 +207,22 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       if (!rec || !video || !video.duration) return;
       if (rec.t > 3 && rec.t < video.duration - 5) {
         try { video.currentTime = rec.t; } catch (_) {}
+        if (video.dataset.resumeToast !== path) {
+          video.dataset.resumeToast = path;
+          showFeedToast(`续播 ${fmtTime(rec.t)}`, 1200, true);
+        }
       }
+    }
+    export function syncRateButtons() {
+      const n = Number(state.playbackRate) || 1;
+      const sel = $("#rate-select");
+      if (sel) sel.value = String(n);
     }
     export function setPlaybackRate(rate) {
       const n = Number(rate) || 1;
       state.playbackRate = n;
       lsSet("nastok_rate", String(n));
-      const sel = $("#rate-select");
-      if (sel) sel.value = String(n);
+      syncRateButtons();
       $$("#feed-track video").forEach((v) => { try { v.playbackRate = n; } catch (_) {} });
       const toast = $("#speed-toast");
       if (toast && n !== 1) {
@@ -231,18 +240,28 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       lsSet("nastok_fit", state.fitMode);
     }
 
-    export function setSort(sort, reload) {
-      state.sort = sort === "newest" ? "newest" : "random";
-      lsSet("nastok_sort", state.sort);
-      $$(".sort-switch button").forEach((b) => {
-        b.classList.toggle("active", b.dataset.sort === state.sort);
-      });
-      const menuSort = $("#menu-sort-btn");
-      if (menuSort) {
-        const newest = state.sort === "newest";
-        menuSort.textContent = newest ? "排序：最新" : "排序：随机";
+    const PLAY_MODE_META = {
+      order: { label: "顺序", icon: () => ICON.listOrder(), sort: "newest" },
+      random: { label: "随机", icon: () => ICON.shuffle(), sort: "random" },
+      loop: { label: "单个循环", icon: () => ICON.repeatOne(), sort: "newest" },
+    };
+
+    export function setPlayMode(mode, reload) {
+      if (!PLAY_MODE_META[mode]) mode = "order";
+      state.playMode = mode;
+      lsSet("nastok_play_mode", mode);
+      const newSort = PLAY_MODE_META[mode].sort;
+      const sortChanged = newSort !== state.sort;
+      state.sort = newSort;
+      const btn = $("#dock-sort-btn");
+      if (btn) {
+        const meta = PLAY_MODE_META[mode];
+        btn.innerHTML = meta.icon();
+        btn.title = `播放顺序：${meta.label}（点按切换）`;
+        btn.setAttribute("aria-label", `切换播放顺序，当前${meta.label}`);
       }
-      if (reload) {
+      // 顺序↔单个循环 列表都是按时间排，无需重载；切进/切出随机才重排列表
+      if (reload && sortChanged) {
         state.seed = null;
         resetAndLoad();
       }
@@ -255,15 +274,10 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       if (btn) {
         const label = MEDIA_MODE_LABEL[state.mediaMode] || "仅视频";
         const iconFn = MEDIA_MODE_ICON[state.mediaMode] || MEDIA_MODE_ICON.video;
-        btn.innerHTML = iconFn();
+        btn.innerHTML = iconFn() + '<span class="btn-label">' + label + '</span>';
         btn.title = `当前：${label}（点按切换）`;
         btn.setAttribute("aria-label", `切换媒体类型，当前${label}`);
         btn.dataset.mode = state.mediaMode;
-      }
-      const menuMedia = $("#menu-media-btn");
-      if (menuMedia) {
-        const label = MEDIA_MODE_LABEL[state.mediaMode] || "仅视频";
-        menuMedia.textContent = label;
       }
       if (reload) {
         state.seed = null;
@@ -271,11 +285,34 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       }
     }
 
-    $("#refresh-btn").innerHTML = ICON.refresh();
-    $("#func-menu-btn").innerHTML = ICON.sliders();
-    $("#account-menu-btn").innerHTML = ICON.user();
-    setSort(state.sort, false);
+    $("#func-menu-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
+    $("#top-more-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
+    $("#search-btn").innerHTML = ICON.grid() + '<span class="btn-label">搜索</span>';
+    $("#settings-btn").innerHTML = ICON.gear() + '<span class="btn-label">设置</span>';
+    $("#dock-more-btn").innerHTML = ICON.more();
+    updateMuteBtn();
+    setPlayMode(state.playMode, false);
     setMediaMode(state.mediaMode, false);
+
+    // 桌面端：右下角 dock-actions(播放顺序/更多)并入底部控制条、排在全屏按钮左侧；
+    // 移动端保持右下角悬浮。跨断点来回搬同一个节点,事件绑定与菜单结构不受影响。
+    {
+      const dockActions = $("#dock-actions");
+      const fsBtn = $("#fullscreen-btn");
+      if (dockActions && fsBtn) {
+        const home = { parent: dockActions.parentElement, next: dockActions.nextSibling };
+        const mq = window.matchMedia("(min-width: 641px)");
+        const place = () => {
+          if (mq.matches) {
+            fsBtn.parentElement.insertBefore(dockActions, fsBtn);
+          } else if (dockActions.parentElement !== home.parent) {
+            home.parent.insertBefore(dockActions, home.next);
+          }
+        };
+        place();
+        mq.addEventListener("change", place);
+      }
+    }
 
     $("#volume-slider").addEventListener("input", (e) => {
       if (itemKind(currentItem()) !== "video") return;
@@ -416,11 +453,11 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
     updateMuteBtn();
     $("#volume-slider").value = String(state.volume || 0);
     applyFitMode();
-    setSort(state.sort, false);
+    setPlayMode(state.playMode, false);
     if ($("#rate-select")) {
-      $("#rate-select").value = String(state.playbackRate || 1);
       $("#rate-select").addEventListener("change", () => setPlaybackRate($("#rate-select").value));
     }
+    syncRateButtons();
 
 
     /* ---------- 全局进度条 ---------- */

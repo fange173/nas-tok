@@ -53,6 +53,8 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
     export function openAdmin(panel) {
       pauseAll();
       showPage("page-admin");
+      // 备份与重置面板仅系统管理员可见
+      $("#admin-backup-tab")?.classList.toggle("hidden", !isSysadmin());
       const target = panel || "libs";
       $$(".admin-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.panel === target));
       $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${target}`));
@@ -142,6 +144,25 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
     });
 
     export let _userLibsTarget = null;
+
+    /* ---------- 添加用户/存储库 弹窗 ---------- */
+
+    function openCreateModal(id) {
+      $(id).classList.add("open");
+    }
+    function closeCreateModal(id) {
+      $(id).classList.remove("open");
+    }
+    $("#user-add-btn").addEventListener("click", () => openCreateModal("#user-create-modal"));
+    $("#user-create-cancel").addEventListener("click", () => closeCreateModal("#user-create-modal"));
+    $("#user-create-modal").addEventListener("click", (e) => {
+      if (e.target === $("#user-create-modal")) closeCreateModal("#user-create-modal");
+    });
+    $("#lib-add-btn").addEventListener("click", () => openCreateModal("#lib-create-modal"));
+    $("#lib-create-cancel").addEventListener("click", () => closeCreateModal("#lib-create-modal"));
+    $("#lib-create-modal").addEventListener("click", (e) => {
+      if (e.target === $("#lib-create-modal")) closeCreateModal("#lib-create-modal");
+    });
 
     export function closeUserLibsModal() {
       _userLibsTarget = null;
@@ -335,6 +356,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         });
         $("#new-user-name").value = "";
         $("#new-user-pass").value = "";
+        closeCreateModal("#user-create-modal");
         showAdminToast("用户已创建", 1800);
         loadUsers();
       } catch (ex) {
@@ -358,6 +380,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
             chip.addEventListener("click", () => {
               $("#new-lib-name").value = d.name;
               $("#new-lib-path").value = d.path || "";
+              openCreateModal("#lib-create-modal");
             });
             discoverList.appendChild(chip);
           });
@@ -574,6 +597,23 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         showAdminToast(ex.message || "恢复失败");
       }
     });
+    $("#backup-reset-btn")?.addEventListener("click", async () => {
+      if (!confirm("恢复默认设置将清空全部用户、存储库、标记、分享与喜欢（媒体文件保留），确定继续？")) return;
+      // 第二重确认:输入指定文字,防手滑
+      const word = prompt("请输入「重置」二字确认操作：");
+      if ((word || "").trim() !== "重置") return;
+      try {
+        const data = await api("/api/admin/reset", {
+          method: "POST",
+          body: JSON.stringify({ confirm: "RESET" }),
+        });
+        const tip = data && typeof data === "object" && data.safety ? `（重置前快照 ${data.safety}）` : "";
+        showAdminToast(`已恢复默认设置${tip}，请用 admin / admin123 重新登录`);
+        setTimeout(() => location.reload(), 2600);
+      } catch (ex) {
+        showAdminToast(ex.message || "重置失败");
+      }
+    });
     $("#lib-sync-btn").addEventListener("click", async () => {
       const btn = $("#lib-sync-btn");
       btn.disabled = true;
@@ -610,6 +650,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         });
         $("#new-lib-name").value = "";
         $("#new-lib-path").value = "";
+        closeCreateModal("#lib-create-modal");
         showAdminToast("存储库已添加", 1800);
         loadLibs();
         refreshBrowserIfOpen();
@@ -637,10 +678,20 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         const tbody = $("#shares-tbody");
         tbody.innerHTML = "";
         if (!data.items || !data.items.length) {
-          tbody.innerHTML = '<tr><td class="table-empty" colspan="9">暂无分享</td></tr>';
+          tbody.innerHTML = '<tr><td class="table-empty" colspan="12">暂无分享</td></tr>';
           return;
         }
         data.items.forEach((s) => {
+          // expires_at 为 UTC naive（后端 _share_expired 按 UTC 判定），解析须补 Z，
+          // 否则非 UTC 时区下会提前显示「已过期」
+          const expired = !!(s.expires_at && Date.parse(`${String(s.expires_at).replace(" ", "T")}Z`) < Date.now());
+          const capped = s.max_views != null && (s.view_count ?? 0) >= s.max_views;
+          let status = "有效";
+          let badge = "badge-on";
+          if (!s.is_active) { status = "已停用"; badge = "badge-off"; }
+          else if (expired) { status = "已过期"; badge = "badge-off"; }
+          else if (capped) { status = "已达上限"; badge = "badge-off"; }
+          const capLabel = s.max_views != null ? `${s.view_count ?? 0} / ${s.max_views}` : "不限";
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>${escapeHtml(s.title || "")}</td>
@@ -650,7 +701,10 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
             <td>${s.view_count ?? 0}</td>
             <td>${s.unique_view_count ?? 0}</td>
             <td>${escapeHtml(s.last_viewed_at || "-")}</td>
-            <td><span class="badge ${s.is_active ? "badge-on" : "badge-off"}">${s.is_active ? "有效" : "已停用"}</span></td>
+            <td>${escapeHtml(s.expires_at || "永久")}</td>
+            <td>${s.has_password ? "有" : "—"}</td>
+            <td>${escapeHtml(capLabel)}</td>
+            <td><span class="badge ${badge}">${status}</span></td>
             <td></td>`;
           const actions = tr.lastElementChild;
           actions.style.display = "flex";

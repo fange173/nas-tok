@@ -614,3 +614,27 @@ def restore_db_snapshot(src_path: str) -> None:
                 pass
     engine.dispose()
     run_migrations()
+
+
+def reset_db_to_factory() -> str:
+    """清空当前库并重建出厂状态(默认 admin/默认库/自动发现目录)。
+
+    重置前先用 online backup 在同目录保留安全快照(命名 nasTok.pre-reset-*)，
+    返回快照路径供调用方回显——误重置仍可用它走恢复备份找回。
+    仅支持 SQLite 文件数据库。
+    """
+    dest = sqlite_db_file()
+    if not dest:
+        raise RuntimeError("仅支持 SQLite 文件数据库重置")
+    dest_dir = os.path.dirname(dest) or "."
+    os.makedirs(dest_dir, exist_ok=True)
+    stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+    safety = os.path.join(dest_dir, f"nasTok.pre-reset-{stamp}.db")
+    make_db_snapshot(safety)
+    engine.dispose()
+    for suffix in ("", "-wal", "-shm"):
+        extra = dest + suffix
+        if os.path.exists(extra):
+            os.unlink(extra)
+    init_db()
+    return safety

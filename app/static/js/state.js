@@ -6,11 +6,19 @@ import { lsGet } from './util.js';
     export const savedMediaMode = lsGet("nastok_media_mode");
     export const savedRate = parseFloat(lsGet("nastok_rate") || "1");
     export const MEDIA_MODES = ["video", "mixed", "images"];
+    export const PLAY_MODES = ["order", "random", "loop"];
+
+    // 旧版只存列表排序(nastok_sort)，迁移：random → 播放顺序「随机」，否则默认「顺序」
+    const savedPlayMode = lsGet("nastok_play_mode")
+      || (lsGet("nastok_sort") === "random" ? "random" : "")
+      || "order";
 
     export const state = {
       user: null,
       tab: "all",
-      sort: lsGet("nastok_sort") === "newest" ? "newest" : "random",
+      playMode: PLAY_MODES.includes(savedPlayMode) ? savedPlayMode : "order",
+      // 列表排序由播放顺序派生：随机=乱序列表，顺序/单个循环=按时间
+      sort: savedPlayMode === "random" ? "random" : "newest",
       mediaMode: MEDIA_MODES.includes(savedMediaMode) ? savedMediaMode : "video",
       seed: null,
       videos: [],
@@ -63,8 +71,8 @@ import { lsGet } from './util.js';
       tagId: null,
       tagged: false,
       tags: null,
+      libraryId: Number(lsGet("nastok_library")) || null,
       query: "",
-      libraryId: null,
       playbackRate: Number.isFinite(savedRate) && savedRate > 0 ? savedRate : 1,
       _favInflight: Object.create(null),
       _playTimer: 0,

@@ -202,5 +202,5 @@ def test_spa_uses_external_modules_only(web):
     assert r.status_code == 200
     assert 'type="module" src="/static/js/main.js' in r.text
     assert "<script>" not in r.text.lower(), "仍存在内联 <script> 块"
-    for mod in ("state", "util", "icons", "feed", "player", "admin", "auth", "tags", "edit-modal", "share-page"):
+    for mod in ("state", "util", "icons", "feed", "player", "admin", "auth", "tags", "search", "share-page"):
         assert mod in "".join(sorted(p.name for p in (ROOT / "app" / "static" / "js").glob("*.js")))
