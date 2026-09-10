@@ -287,7 +287,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
 
     $("#func-menu-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
     $("#top-more-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
-    $("#search-btn").innerHTML = ICON.grid() + '<span class="btn-label">搜索</span>';
+    $("#search-btn").innerHTML = ICON.grid() + '<span class="btn-label">网格</span>';
     $("#settings-btn").innerHTML = ICON.gear() + '<span class="btn-label">设置</span>';
     $("#dock-more-btn").innerHTML = ICON.more();
     updateMuteBtn();

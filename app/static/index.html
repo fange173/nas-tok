@@ -92,6 +92,7 @@
     <div class="top-bar">
       <div class="brand-group">
         <div class="brand-mini desktop-only">NasTok</div>
+        <button type="button" class="chip-btn top-icon-btn exit-search-btn desktop-only hidden" id="exit-search-btn" title="退出搜索" aria-label="退出搜索"></button>
         <span class="feed-counter" id="feed-counter" aria-hidden="false">0 / 0</span>
         <button type="button" class="btn-icon desktop-only" id="help-btn" title="帮助" style="width:34px;height:34px" aria-label="帮助">?</button>
       </div>
@@ -100,10 +101,11 @@
           <option value="all">推荐</option>
           <option value="fav">喜欢</option>
         </select>
+        <button type="button" class="chip-btn top-icon-btn exit-search-btn mobile-only hidden" id="exit-search-btn-m" title="退出搜索" aria-label="退出搜索"></button>
       </div>
       <div class="top-actions">
         <button type="button" class="chip-btn top-icon-btn" id="media-mode-btn" title="仅视频" aria-label="切换媒体类型"></button>
-        <button type="button" class="chip-btn top-icon-btn" id="search-btn" title="搜索" aria-label="搜索"></button>
+        <button type="button" class="chip-btn top-icon-btn" id="search-btn" title="网格" aria-label="网格"></button>
         <div class="top-more m-menu" id="func-menu">
           <button type="button" class="chip-btn top-icon-btn top-more-btn" id="func-menu-btn" title="账户" aria-label="账户菜单" aria-expanded="false"></button>
           <div class="top-more-panel">
@@ -155,8 +157,9 @@
     <div class="feed-viewport fit-contain" id="feed-viewport">
       <div class="feed-track" id="feed-track"></div>
       <div class="dock-actions" id="dock-actions">
-        <button type="button" class="btn-icon" id="dock-sort-btn" title="播放顺序：顺序" aria-label="切换播放顺序"></button>
         <button type="button" class="btn-icon" id="dock-mute-btn" title="静音" aria-label="静音"></button>
+        <button type="button" class="btn-icon" id="dock-sort-btn" title="播放顺序：顺序" aria-label="切换播放顺序"></button>
+        <button type="button" class="btn-icon" id="dock-fav-btn" title="喜欢" aria-label="喜欢"></button>
         <div class="dock-more" id="dock-more">
           <button type="button" class="btn-icon" id="dock-more-btn" title="更多" aria-label="更多操作" aria-expanded="false"></button>
           <div class="dock-more-menu hidden" id="dock-more-menu"></div>

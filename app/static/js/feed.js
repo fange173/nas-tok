@@ -186,6 +186,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       clearFeedTrack();
       bindGlobalProgress(null);
       updateFeedCounter();
+      updateSearchExit();
       return loadVideos(true, !!forceRefresh);
     }
 
@@ -492,6 +493,19 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       }
     }
 
+    /** 独立「喜欢」按钮：按当前条目的 favorited 刷新图标与高亮 */
+    export function syncDockFav() {
+      const btn = $("#dock-fav-btn");
+      if (!btn) return;
+      const v = currentItem();
+      const fav = !!(v && v.favorited);
+      btn.classList.toggle("active", fav);
+      btn.innerHTML = ICON.heart(fav);
+      btn.title = fav ? "取消喜欢" : "喜欢";
+      btn.setAttribute("aria-label", fav ? "取消喜欢" : "喜欢");
+      btn.disabled = !v;
+    }
+
     /* ---------- 右下角操作区：更多菜单 + 信息弹窗 ---------- */
 
     function closeDockMenu() {
@@ -499,7 +513,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       $("#dock-more-btn")?.setAttribute("aria-expanded", "false");
     }
 
-    /** 每次打开按当前条目重建菜单：喜欢 / 标记 / 信息 / 分享 */
+    /** 每次打开按当前条目重建菜单：标记 / 信息 / 分享 */
     function openDockMenu() {
       const menu = $("#dock-more-menu");
       const v = currentItem();
@@ -512,18 +526,6 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         if (cls) el.className = cls;
         return el;
       };
-
-      const favItem = mkItem("button", "side-more-item");
-      favItem.type = "button";
-      favItem.innerHTML = `${ICON.heart(!!v.favorited)}<span>${v.favorited ? "已喜欢" : "喜欢"}</span>`;
-      favItem.addEventListener("click", async (ev) => {
-        ev.stopPropagation();
-        closeDockMenu();
-        const btn = document.createElement("button");
-        btn.className = "btn-icon fav-btn" + (v.favorited ? " active" : "");
-        await toggleFavorite(state.videos[state.index], btn, state.index);
-      });
-      menu.appendChild(favItem);
 
       const tagItem = mkItem("button", "side-more-item");
       tagItem.type = "button";
@@ -574,6 +576,47 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
     document.addEventListener("click", (e) => {
       if (!e.target.closest("#dock-more")) closeDockMenu();
     });
+
+    /* 独立「喜欢」按钮 */
+    $("#dock-fav-btn")?.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      revealChrome();
+      const v = currentItem();
+      if (!v) return;
+      await toggleFavorite(state.videos[state.index], $("#dock-fav-btn"), state.index);
+      syncDockFav();
+    });
+
+    /* 「退出搜索」按钮：清空 state.query 后回到普通列表 */
+    const exitLabel = ICON.back() + '<span class="btn-label">退出搜索</span>';
+    if ($("#exit-search-btn")) $("#exit-search-btn").innerHTML = exitLabel;
+    if ($("#exit-search-btn-m")) $("#exit-search-btn-m").innerHTML = exitLabel;
+    const exitSearchClick = () => {
+      revealChrome();
+      exitSearchFeed({ reload: true });
+    };
+    $("#exit-search-btn")?.addEventListener("click", exitSearchClick);
+    $("#exit-search-btn-m")?.addEventListener("click", exitSearchClick);
+
+    /** 根据是否处于搜索过滤状态，切换两个「退出搜索」按钮的显隐 */
+    export function updateSearchExit() {
+      const active = !!state.query;
+      $("#exit-search-btn")?.classList.toggle("hidden", !active);
+      $("#exit-search-btn-m")?.classList.toggle("hidden", !active);
+    }
+
+    /**
+     * 彻底退出搜索：清空过滤条件并（可选）重载回普通列表。
+     * reload=true 时重置分页并强制重载普通列表（resetAndLoad 内部也会调用
+     * updateSearchExit()）；仅想在 feed 侧切按钮显隐时传 reload:false。
+     */
+    export function exitSearchFeed({ reload }) {
+      state.query = "";
+      const input = $("#search-input");
+      if (input) input.value = "";
+      if (reload) resetAndLoad(true);
+      else updateSearchExit();
+    }
 
     export function openInfoModal(v) {
       if (!v) return;
@@ -1289,6 +1332,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       const kind = itemKind(info);
       updateDockForKind(kind);
       setDockTitle(info.title || "");
+      syncDockFav();
 
       // 只暂停上一条视频
       if (state.currentVideo) {

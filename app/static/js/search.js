@@ -1,6 +1,6 @@
 /* search.js — 全屏搜索页：关键词搜索 + 结果卡片 + 点击定位播放 */
 import { ICON, MEDIA_MODE_ICON } from './icons.js';
-import { goTo, loadVideos, playCurrent, resetAndLoad, streamUrl, syncFeedTabSelect } from './feed.js';
+import { goTo, loadVideos, playCurrent, resetAndLoad, exitSearchFeed, streamUrl, syncFeedTabSelect } from './feed.js';
 import { setMediaMode, setPlayMode } from './player.js';
 import { itemKind, state } from './state.js';
 import { $, api, escapeHtml, showPage } from './util.js';
@@ -24,8 +24,10 @@ import { $, api, escapeHtml, showPage } from './util.js';
         const v = $("#feed-track video");
         if (v) v.pause();
       } catch (_) {}
-      // 首次进入默认展示全部媒体网格；已有内容则保持（含滚动位置）
-      if (_q === null) runSearch(input.value);
+      // 进入时按当前关键词加载网格：首次(_q===null)或过滤词已变(如退出搜索
+      // 清空 state.query)时需重新加载,否则仍停留在旧的筛选结果且无清除入口
+      const q = (input.value || "").trim();
+      if (_q === null || _q !== q) runSearch(input.value);
       setTimeout(() => input.focus(), 60);
     }
 
@@ -63,6 +65,7 @@ import { $, api, escapeHtml, showPage } from './util.js';
         if (myGen !== _gen) return;
         renderResults(data.items || [], q);
         _hasMore = (data.page || 1) * (data.limit || PAGE_LIMIT) < (data.total || 0);
+        ensureGridFill();
       } catch (ex) {
         if (myGen !== _gen) return;
         grid.classList.add("hidden");
@@ -93,6 +96,17 @@ import { $, api, escapeHtml, showPage } from './util.js';
       } finally {
         _loadingMore = false;
         spinner.classList.add("hidden");
+      }
+    }
+
+    /** 首屏网格不足一屏时滚动条不出现,无限滚动 loadMore 永不触发。
+     * 大屏桌面端需自动翻页补齐,直到出现滚动条或无更多。 */
+    async function ensureGridFill() {
+      const el = $("#search-body");
+      if (!el || !_hasMore || _loadingMore) return;
+      let guard = 0;
+      while (_hasMore && !_loadingMore && el.scrollHeight <= el.clientHeight && guard++ < 50) {
+        await loadMore();
       }
     }
 
@@ -181,6 +195,10 @@ import { $, api, escapeHtml, showPage } from './util.js';
         input.value = "";
         syncClearBtn();
         clearTimeout(_timer);
+        // 若 feed 正处于搜索过滤态,重置标志外还要真正重载回普通列表,
+        // 否则返回播放页仍是搜索过滤的列表(仅清标志不够)
+        const reload = state.query !== "";
+        exitSearchFeed({ reload });
         runSearch("");
         input.focus();
       });
