@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import glob
+import json
 import os
 import re
 import tempfile
@@ -332,6 +333,41 @@ def change_password(
     set_auth_cookie(response, token, max_age)
     write_audit_log(db, user=user, action="admin", detail="修改密码")
     return {"ok": True, "user": user_to_dict(user)}
+
+
+class SettingsUpdateRequest(BaseModel):
+    settings: dict
+
+
+def _load_user_settings_raw(user: User) -> dict:
+    raw = getattr(user, "settings", None) or "{}"
+    if isinstance(raw, dict):
+        return raw
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+@app.get("/api/auth/settings")
+def get_settings(user: User = Depends(get_current_user)):
+    return {"settings": _load_user_settings_raw(user)}
+
+
+@app.put("/api/auth/settings")
+def update_settings(
+    body: SettingsUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not isinstance(body.settings, dict):
+        raise HTTPException(status_code=400, detail="settings 必须是对象")
+    data = _load_user_settings_raw(user)
+    data.update(body.settings)
+    user.settings = json.dumps(data, ensure_ascii=False)
+    db.commit()
+    return {"ok": True, "settings": data}
 
 
 # ---------- 视频 ----------

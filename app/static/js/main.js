@@ -6,9 +6,10 @@ import { openAdmin } from './admin.js';
 import { doLogout, isStaff } from './auth.js';
 import { enterFeed, playCurrent } from './feed.js';
 import { ICON } from './icons.js';
+import { syncSettingsUi } from './player.js';
 import { bindSearchPage, openSearch } from './search.js';
 import { openPublicShare } from './share-page.js';
-import { state } from './state.js';
+import { loadServerSettings, state } from './state.js';
 import { $, api, showPage } from './util.js';
 
     export async function bootstrap() {
@@ -20,6 +21,9 @@ import { $, api, showPage } from './util.js';
       try {
         const user = await api("/api/auth/me");
         state.user = user;
+        // 登录后拉取逐用户设置(DB 真源),合并进 state 并回填开关;localStorage 仅离线兜底
+        await loadServerSettings();
+        syncSettingsUi();
         if (user.must_change_password) {
           showPage("page-change-pwd");
         } else {

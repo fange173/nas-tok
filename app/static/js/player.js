@@ -1,7 +1,7 @@
 /* player.js — 音量/画面适配/沉浸模式/全局进度条 + 事件绑定(由 split_frontend.py 机械切割,勿手改顺序) */
 import { closeTopMore, nextVideo, prevVideo, resetAndLoad, showFeedToast, streamUrl, syncDesktopPlayerControls, togglePlayPause } from './feed.js';
 import { ICON, MEDIA_MODE_ICON, MEDIA_MODE_LABEL } from './icons.js';
-import { MEDIA_MODES, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, state } from './state.js';
+import { MEDIA_MODES, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, persistSetting, state } from './state.js';
 import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
 
     /* ---------- 音量 / 画面模式 ---------- */
@@ -150,7 +150,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
         clearTimeout(state._chromeTimer);
         state._chromeTimer = 0;
       }
-      if (!isMobileFeed() || state.immersive) return;
+      if (!isMobileFeed() || state.immersive || !state.immersiveMobile) return;
       const video = getCurrentVideo();
       const playing = video && !video.paused;
       if (!force && !playing) return;
@@ -187,6 +187,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       try { return JSON.parse(lsGet(POS_KEY) || "{}") || {}; } catch (_) { return {}; }
     }
     export function saveWatchPos(path, t, d) {
+      if (!state.resumePlayback) return;
       if (!path || !d || !Number.isFinite(t)) return;
       if (t < 3 || t > d - 5) {
         const all = readWatchPos();
@@ -203,6 +204,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       lsSet(POS_KEY, JSON.stringify(all));
     }
     export function resumeWatchPos(video, path) {
+      if (!state.resumePlayback) return;
       const rec = readWatchPos()[path];
       if (!rec || !video || !video.duration) return;
       if (rec.t > 3 && rec.t < video.duration - 5) {
@@ -219,9 +221,8 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       if (sel) sel.value = String(n);
     }
     export function setPlaybackRate(rate) {
-      const n = Number(rate) || 1;
-      state.playbackRate = n;
-      lsSet("nastok_rate", String(n));
+      persistSetting("rate", rate);
+      const n = Number(state.playbackRate) || 1;
       syncRateButtons();
       $$("#feed-track video").forEach((v) => { try { v.playbackRate = n; } catch (_) {} });
       const toast = $("#speed-toast");
@@ -237,7 +238,6 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       vp.classList.remove("fit-contain", "fit-cover", "fit-fill", "fit-width", "fit-height");
       vp.classList.add("fit-" + state.fitMode);
       $("#fit-mode").value = state.fitMode;
-      lsSet("nastok_fit", state.fitMode);
     }
 
     const PLAY_MODE_META = {
@@ -246,10 +246,10 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       loop: { label: "单个循环", icon: () => ICON.repeatOne(), sort: "newest" },
     };
 
-    export function setPlayMode(mode, reload) {
+    export function setPlayMode(mode, reload, persist) {
       if (!PLAY_MODE_META[mode]) mode = "order";
       state.playMode = mode;
-      lsSet("nastok_play_mode", mode);
+      if (persist) persistSetting("play_mode", mode);
       const newSort = PLAY_MODE_META[mode].sort;
       const sortChanged = newSort !== state.sort;
       state.sort = newSort;
@@ -267,9 +267,9 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       }
     }
 
-    export function setMediaMode(mode, reload) {
+    export function setMediaMode(mode, reload, persist) {
       state.mediaMode = MEDIA_MODES.includes(mode) ? mode : "video";
-      lsSet("nastok_media_mode", state.mediaMode);
+      if (persist) persistSetting("media_mode", state.mediaMode);
       const btn = $("#media-mode-btn");
       if (btn) {
         const label = MEDIA_MODE_LABEL[state.mediaMode] || "仅视频";
@@ -336,9 +336,35 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
     });
 
     $("#fit-mode").addEventListener("change", (e) => {
-      state.fitMode = e.target.value;
+      persistSetting("fit_mode", e.target.value);
       applyFitMode();
     });
+
+    /* 设置面板开关：续播(默认关) / 沉浸播放(默认开,仅移动端生效) */
+    function syncSettingsSwitches() {
+      const r = $("#resume-playback-switch");
+      if (r) r.checked = state.resumePlayback;
+      const i = $("#immersive-playback-switch");
+      if (i) i.checked = state.immersiveMobile;
+    }
+    export { syncSettingsSwitches };
+    /** 登录拉取 DB 设置后,把各设置值刷新到界面(纯渲染,不触发持久化)。 */
+    export function syncSettingsUi() {
+      syncSettingsSwitches();
+      syncRateButtons();
+      applyFitMode();
+      setPlayMode(state.playMode, false);
+      setMediaMode(state.mediaMode, false);
+    }
+    $("#resume-playback-switch")?.addEventListener("change", (e) => {
+      persistSetting("resume_playback", !!e.target.checked);
+    });
+    $("#immersive-playback-switch")?.addEventListener("change", (e) => {
+      persistSetting("immersive_mobile", !!e.target.checked);
+      if (state.immersiveMobile) showFeedToast("沉浸播放仅移动端生效", 2000);
+      else revealChrome();
+    });
+    syncSettingsSwitches();
 
     // 桌面播放控制栏按钮
     $("#pc-prev-btn").innerHTML = ICON.prev();

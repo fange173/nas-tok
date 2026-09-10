@@ -26,7 +26,7 @@ def patch_engine(tmp_path, monkeypatch):
 def test_migrations_apply_once_and_idempotent(patch_engine):
     database, db_file = patch_engine
     applied = database.run_migrations()
-    assert applied == [1, 2, 3]
+    assert applied == [1, 2, 3, 4]
     # 第二次全部跳过
     assert database.run_migrations() == []
 
@@ -51,7 +51,7 @@ def test_migration_preserves_existing_user_data(patch_engine):
     conn.close()
 
     applied = database.run_migrations()
-    assert applied == [1, 2, 3]
+    assert applied == [1, 2, 3, 4]
 
     conn = sqlite3.connect(db_file)
     try:
@@ -76,6 +76,6 @@ def test_migration_upgrades_legacy_schema_incrementally(tmp_path, monkeypatch):
         conn.execute(text("PRAGMA user_version = 1"))
     monkeypatch.setattr(database, "engine", engine)
 
-    assert database.run_migrations() == [2, 3]
+    assert database.run_migrations() == [2, 3, 4]
     with engine.connect() as conn:
-        assert conn.execute(text("PRAGMA user_version")).scalar() == 3
+        assert conn.execute(text("PRAGMA user_version")).scalar() == 4

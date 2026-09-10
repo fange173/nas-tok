@@ -318,3 +318,33 @@ def test_pwa_routes_and_spa_links(web):
     js = client.get("/static/js/main.js")
     assert js.status_code == 200
     assert "/static/sw.js" in js.text
+
+
+def test_user_settings_roundtrip(web):
+    """逐用户设置:DEFAULT '{}' → PUT 合并 → GET 取回;未登录 401。"""
+    client = web["client"]
+    dbmod = web["database"]
+
+    # 未登录访问返回 401
+    assert client.get("/api/auth/settings").status_code == 401
+
+    _login(client)
+
+    # 初始为空对象
+    r = client.get("/api/auth/settings")
+    assert r.status_code == 200
+    assert r.json()["settings"] == {}
+
+    # PUT 单键更新(服务端合并)
+    r = client.put("/api/auth/settings", json={"settings": {"immersive_mobile": False}})
+    assert r.status_code == 200
+    assert r.json()["settings"] == {"immersive_mobile": False}
+
+    # 再 PUT 追加另一键
+    r = client.put("/api/auth/settings", json={"settings": {"resume_playback": True}})
+    assert r.json()["settings"] == {"immersive_mobile": False, "resume_playback": True}
+
+    # GET 读回完整对象
+    r = client.get("/api/auth/settings")
+    assert r.status_code == 200
+    assert r.json()["settings"] == {"immersive_mobile": False, "resume_playback": True}

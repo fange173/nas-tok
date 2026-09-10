@@ -432,6 +432,43 @@ button { -webkit-tap-highlight-color: transparent; }
   text-align-last: center;
 }
 .settings-select option { background: #17171c; color: #fff; }
+/* 设置面板开关 */
+.settings-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  cursor: pointer;
+}
+.settings-switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.settings-switch .settings-switch-track {
+  width: 38px;
+  height: 21px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  transition: background 0.2s ease;
+  position: relative;
+}
+.settings-switch .settings-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease;
+}
+.settings-switch input:checked + .settings-switch-track { background: var(--accent); }
+.settings-switch input:checked + .settings-switch-track::after { transform: translateX(17px); }
+.settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 .chip-btn {
   border: none;
   color: #fff;
@@ -1783,7 +1820,9 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   }
 
   /* 闲置时底栏播放控制随顶栏一同淡出,仅移动端 */
-  .feed-page.chrome-dimmed .bottom-dock {
+  .feed-page.chrome-dimmed .bottom-dock,
+  .feed-page.chrome-dimmed .dock-actions,
+  .feed-page.chrome-dimmed .video-meta {
     opacity: 0;
     transform: translateY(12px);
     pointer-events: none;

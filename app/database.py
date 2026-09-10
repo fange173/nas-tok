@@ -112,6 +112,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     credentials_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 逐用户偏好设置;JSON 字符串,DB 持久化于服务端,localStorage 仅作离线兜底
+    settings: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     logs: Mapped[List["AuditLog"]] = relationship(back_populates="user")
@@ -281,7 +283,7 @@ def get_db() -> Generator[Session, None, None]:
 # PRAGMA user_version 驱动;所有迁移必须幂等(旧库 user_version=0 会全部重放)。
 # 新增迁移:追加 (版本号, 函数) 到 _MIGRATIONS 尾部,并把 SCHEMA_VERSION +1。
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def _migrate_v1(conn) -> None:
@@ -356,10 +358,18 @@ def _migrate_v3(conn) -> None:
     )
 
 
+def _migrate_v4(conn) -> None:
+    """用户偏好设置: users.settings 存 JSON 字符串。"""
+    _add_column_if_missing(
+        conn, "users", "settings", "settings TEXT NOT NULL DEFAULT '{}'"
+    )
+
+
 _MIGRATIONS = [
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
+    (4, _migrate_v4),
 ]
 
 

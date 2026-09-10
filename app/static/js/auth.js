@@ -1,7 +1,7 @@
 /* auth.js — 登录/改密/登出表单与角色判断(由 split_frontend.py 机械切割,勿手改顺序) */
 import { clearFeedTrack, enterFeed, invalidatePendingLoad, pauseAll } from './feed.js';
-import { bindGlobalProgress } from './player.js';
-import { state } from './state.js';
+import { bindGlobalProgress, syncSettingsUi } from './player.js';
+import { loadServerSettings, state } from './state.js';
 import { $, $$, api, showPage } from './util.js';
 
     /* ---------- 密码小眼睛 ---------- */
@@ -36,6 +36,8 @@ import { $, $$, api, showPage } from './util.js';
         if (data.user.must_change_password) {
           showPage("page-change-pwd");
         } else {
+          await loadServerSettings();
+          syncSettingsUi();
           enterFeed();
         }
       } catch (ex) {
@@ -67,6 +69,8 @@ import { $, $$, api, showPage } from './util.js';
           }),
         });
         state.user = data.user;
+        await loadServerSettings();
+        syncSettingsUi();
         enterFeed();
       } catch (ex) {
         err.textContent = ex.message || "修改失败";

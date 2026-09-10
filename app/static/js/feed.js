@@ -96,13 +96,13 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
     $("#media-mode-btn")?.addEventListener("click", () => {
       const i = MEDIA_MODES.indexOf(state.mediaMode);
       const next = MEDIA_MODES[(i + 1) % MEDIA_MODES.length];
-      setMediaMode(next, true);
+      setMediaMode(next, true, true);
     });
 
     // 播放顺序三态循环：顺序 → 随机 → 单个循环
     const PLAY_MODE_NEXT = { order: "random", random: "loop", loop: "order" };
     $("#dock-sort-btn")?.addEventListener("click", () => {
-      setPlayMode(PLAY_MODE_NEXT[state.playMode] || "order", true);
+      setPlayMode(PLAY_MODE_NEXT[state.playMode] || "order", true, true);
     });
     $("#dock-mute-btn")?.addEventListener("click", () => {
       revealChrome();
