@@ -51,8 +51,6 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
         dockMute.disabled = kind !== "video";
         dockMute.title = kind === "video" ? (state.muted ? "取消静音" : "静音") : "图片无声音";
       }
-      const page = $("#page-feed");
-      if (page) page.classList.toggle("is-media-still", kind !== "video");
     }
 
     // 底栏左下角标题（PC 端显示，替代 slide 内的 video-meta）

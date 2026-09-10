@@ -65,7 +65,8 @@ import { $, api, escapeHtml, showPage } from './util.js';
         if (myGen !== _gen) return;
         renderResults(data.items || [], q);
         _hasMore = (data.page || 1) * (data.limit || PAGE_LIMIT) < (data.total || 0);
-        ensureGridFill();
+        // 补齐首屏不足一屏的情况;失败静默(翻页错误不应影响已渲染结果)
+        ensureGridFill().catch(() => {});
       } catch (ex) {
         if (myGen !== _gen) return;
         grid.classList.add("hidden");

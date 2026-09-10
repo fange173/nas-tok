@@ -187,6 +187,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       bindGlobalProgress(null);
       updateFeedCounter();
       updateSearchExit();
+      // 列表已清空,立即把喜欢按钮置为空心禁用态,加载期间不再残留上一条状态
+      syncDockFav();
       return loadVideos(true, !!forceRefresh);
     }
 
@@ -450,6 +452,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         renderFeedEmpty();
         bindGlobalProgress(null);
         updateFeedCounter();
+        syncDockFav();
         return;
       }
       renderSlides(0);
@@ -586,6 +589,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       await toggleFavorite(state.videos[state.index], $("#dock-fav-btn"), state.index);
       syncDockFav();
     });
+    // 模块加载即填入空心图标(此时无当前条目,呈禁用态),避免首次数据到达前按钮空白
+    syncDockFav();
 
     /* 「退出搜索」按钮：清空 state.query 后回到普通列表 */
     const exitLabel = ICON.back() + '<span class="btn-label">退出搜索</span>';
@@ -1327,6 +1332,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         state.currentVideo = null;
         updateDockForKind("video");
         setDockTitle("");
+        // 无当前条目(空列表/加载中/加载失败):同步为空心禁用态,避免按钮停留在旧状态
+        syncDockFav();
         return;
       }
       const kind = itemKind(info);
