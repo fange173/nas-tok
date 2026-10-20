@@ -105,7 +105,7 @@
       </div>
       <div class="top-actions">
         <button type="button" class="chip-btn top-icon-btn" id="media-mode-btn" title="仅视频" aria-label="切换媒体类型"></button>
-        <button type="button" class="chip-btn top-icon-btn" id="search-btn" title="网格" aria-label="网格"></button>
+        <button type="button" class="chip-btn top-icon-btn" id="search-btn" title="搜索 / 浏览全部" aria-label="搜索"></button>
         <div class="top-more m-menu" id="func-menu">
           <button type="button" class="chip-btn top-icon-btn top-more-btn" id="func-menu-btn" title="账户" aria-label="账户菜单" aria-expanded="false"></button>
           <div class="top-more-panel">
@@ -123,6 +123,7 @@
         <div class="top-more" id="settings-menu">
           <button type="button" class="chip-btn top-icon-btn top-more-btn" id="settings-btn" title="设置" aria-label="设置" aria-expanded="false"></button>
           <div class="top-more-panel settings-panel">
+            <div class="settings-group-title">播放</div>
             <div class="settings-row">
               <label for="fit-mode">画面比例</label>
               <select class="settings-select" id="fit-mode" aria-label="画面适配">
@@ -145,10 +146,6 @@
               </select>
             </div>
             <div class="settings-row">
-              <label for="library-select">存储库</label>
-              <select class="settings-select" id="library-select" aria-label="切换存储库"></select>
-            </div>
-            <div class="settings-row">
               <label for="resume-playback-switch">续播</label>
               <label class="settings-switch">
                 <input type="checkbox" id="resume-playback-switch" aria-label="续播上次进度" />
@@ -156,11 +153,16 @@
               </label>
             </div>
             <div class="settings-row">
-              <label for="immersive-playback-switch">沉浸播放</label>
+              <label for="immersive-playback-switch">沉浸播放<span class="settings-hint">仅手机生效</span></label>
               <label class="settings-switch">
                 <input type="checkbox" id="immersive-playback-switch" aria-label="沉浸播放" />
                 <span class="settings-switch-track" aria-hidden="true"></span>
               </label>
+            </div>
+            <div class="settings-group-title">内容</div>
+            <div class="settings-row">
+              <label for="library-select">存储库</label>
+              <select class="settings-select" id="library-select" aria-label="切换存储库"></select>
             </div>
           </div>
         </div>
@@ -169,6 +171,7 @@
     <button type="button" class="exit-immersive-btn hidden desktop-only" id="exit-immersive-btn" aria-label="退出全屏"></button>
 
     <div class="feed-viewport fit-contain" id="feed-viewport">
+      <canvas class="ambient-canvas" id="ambient-canvas" width="48" height="27" aria-hidden="true"></canvas>
       <div class="feed-track" id="feed-track"></div>
       <div class="dock-actions" id="dock-actions">
         <button type="button" class="btn-icon" id="dock-mute-btn" title="静音" aria-label="静音"></button>
@@ -248,6 +251,11 @@
         <input id="search-input" type="search" placeholder="搜索标题或路径" maxlength="128" autocomplete="off" aria-label="搜索关键词" />
         <button type="button" class="search-clear-btn hidden" id="search-clear-btn" title="清空" aria-label="清空关键词">×</button>
       </div>
+    </div>
+    <div class="search-filters" id="search-filters" role="tablist" aria-label="媒体类型">
+      <button type="button" class="search-filter active" data-mode="mixed" role="tab" aria-selected="true">全部</button>
+      <button type="button" class="search-filter" data-mode="video" role="tab" aria-selected="false">视频</button>
+      <button type="button" class="search-filter" data-mode="images" role="tab" aria-selected="false">图片 / 相册</button>
     </div>
     <div class="search-body" id="search-body">
       <div class="search-empty hidden" id="search-empty">正在加载…</div>
@@ -391,16 +399,10 @@
           <table>
             <thead>
               <tr>
-                <th>标题</th>
-                <th>路径</th>
-                <th>创建者</th>
-                <th>创建时间</th>
-                <th>打开次数</th>
-                <th>独立访客</th>
-                <th>最近访问</th>
-                <th>过期</th>
-                <th>密码</th>
-                <th>上限</th>
+                <th>媒体</th>
+                <th>创建</th>
+                <th>访问</th>
+                <th>限制</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -483,6 +485,7 @@
           <p>此分享受密码保护</p>
           <input id="share-password-input" type="password" placeholder="输入分享密码" autocomplete="off" />
           <button type="button" class="btn btn-primary btn-sm" id="share-password-btn">解锁</button>
+          <p class="share-password-error" id="share-password-error" role="alert"></p>
         </div>
       </div>
       <div class="share-meta">

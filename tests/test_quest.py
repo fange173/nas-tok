@@ -254,3 +254,85 @@ def test_my_libraries_endpoint(web):
     assert r.status_code == 200
     names = [it["name"] for it in r.json()["items"]]
     assert "默认库" in names
+
+
+def test_gbk_subtitle_served_and_flagged(web):
+    """GBK 编码 srt 不再 500;列表按页标注 has_subtitle。"""
+    client = web["client"]
+    root = web["root"]
+    (root / "clip.srt").write_bytes("1\n00:00:01,000 --> 00:00:02,000\n你好\n".encode("gbk"))
+    _login(client)
+    r = client.get("/api/videos/subtitles/clip.mp4")
+    assert r.status_code == 200, r.text
+    assert r.text.startswith("WEBVTT") and "你好" in r.text and "00:00:01.000" in r.text
+    items = client.get("/api/videos/list", params={"sort": "newest", "refresh": "true"}).json()["items"]
+    flags = {it["path"]: it.get("has_subtitle") for it in items}
+    assert flags["clip.mp4"] is True
+    assert flags["other.mkv"] is False
+
+
+def test_share_password_bruteforce_locked(web):
+    client = web["client"]
+    _login(client)
+    r = client.post("/api/shares", json={"path": "clip.mp4", "password": "right-pass"})
+    assert r.status_code == 201, r.text
+    token = r.json()["token"]
+
+    from fastapi.testclient import TestClient
+
+    anon = TestClient(web["main"].app)
+    import app.share as share
+
+    for _ in range(share.SHARE_AUTH_MAX_FAILURES):
+        assert anon.post(f"/api/share/{token}/auth", json={"password": "nope"}).status_code == 401
+    # 达到上限后连正确密码也 429
+    assert anon.post(f"/api/share/{token}/auth", json={"password": "right-pass"}).status_code == 429
+    share._share_auth_failures.clear()
+    r = anon.post(f"/api/share/{token}/auth", json={"password": "right-pass"})
+    assert r.status_code == 200 and r.json()["stream_url"]
+
+
+def test_settings_size_capped(web):
+    client = web["client"]
+    _login(client)
+    assert client.put("/api/auth/settings", json={"settings": {"rate": 1.5}}).status_code == 200
+    r = client.put("/api/auth/settings", json={"settings": {"blob": "x" * 9000}})
+    assert r.status_code == 413
+    assert client.get("/api/auth/settings").json()["settings"] == {"rate": 1.5}
+
+
+def test_share_hidden_when_library_disabled(web):
+    client = web["client"]
+    _login(client)
+    token = client.post("/api/shares", json={"path": "clip.mp4"}).json()["token"]
+    from fastapi.testclient import TestClient
+
+    anon = TestClient(web["main"].app)
+    assert anon.get(f"/api/share/{token}").status_code == 200
+    lib_id = client.get("/api/admin/libraries").json()["items"][0]["id"]
+    assert client.put(f"/api/admin/libraries/{lib_id}", json={"enabled": False}).status_code == 200
+    assert anon.get(f"/api/share/{token}").status_code == 404
+    assert anon.get(f"/api/share/{token}/stream").status_code == 404
+    client.put(f"/api/admin/libraries/{lib_id}", json={"enabled": True})
+    assert anon.get(f"/api/share/{token}").status_code == 200
+
+
+def test_album_cover_in_list(web):
+    import os
+    import time
+
+    root = web["root"]
+    album = root / "trip"
+    (album / "sub").mkdir(parents=True)
+    (album / "b.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+    (album / "sub" / "a.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+    old = time.time() - 3600
+    os.utime(album / "sub" / "a.jpg", (old, old))
+    client = web["client"]
+    _login(client)
+    # 默认库只扫根目录;为相册建子目录库
+    r = client.post("/api/admin/libraries", json={"name": "Trip", "path": "trip"})
+    assert r.status_code == 201, r.text
+    items = client.get("/api/videos/list", params={"media_mode": "images", "sort": "newest", "refresh": "true"}).json()["items"]
+    albums = [it for it in items if it["kind"] == "album"]
+    assert albums and albums[0]["cover"] == "trip/sub/a.jpg"

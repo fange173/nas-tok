@@ -2,11 +2,11 @@
 import { openAdmin } from './admin.js';
 import { isStaff, isSysadmin } from './auth.js';
 import { ERROR_ICON, ICON, PLAY_ICON } from './icons.js';
-import { bindGlobalProgress, bindMediaSession, bumpChrome, ensureAlbumImages, exitImmersive, fillAlbumTrack, getCurrentVideo, resumeWatchPos, revealChrome, saveWatchPos, setAlbumIndex, setMediaMode, setPlaybackRate, setPlayMode, setProgressUI, setDockTitle, syncMediaLabel, updateAlbumProgress, updateDockForKind } from './player.js';
+import { bindGlobalProgress, bindMediaSession, bumpChrome, setAmbientSource, ensureAlbumImages, exitImmersive, fillAlbumTrack, getCurrentVideo, resumeWatchPos, revealChrome, saveWatchPos, setAlbumIndex, setMediaMode, setPlaybackRate, setPlayMode, setProgressUI, setDockTitle, syncMediaLabel, updateAlbumProgress, updateDockForKind } from './player.js';
 import { setShareMenuItem, shareVideo, unshareVideo } from './share-page.js';
 import { MEDIA_MODES, NEXT_PAGE_PREFETCH_THRESHOLD, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, state } from './state.js';
 import { openTagModal, refreshTagCache } from './tags.js';
-import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPage } from './util.js';
+import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet, showPage } from './util.js';
 
     /* ---------- Feed 标签 / 排序 ---------- */
     const KIND_LABEL = { video: "视频", image: "图片", album: "相册" };
@@ -275,6 +275,17 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
           if (myGen !== state.loadGen) throw ex;
           if (ex.status === 403 && state.user && state.user.must_change_password) {
             showPage("page-change-pwd");
+          } else if (ex.status === 403 && initial && state.libraryId) {
+            // 本机记住的存储库已被删除/收回授权(或换了账户登录):回退到「全部存储库」,
+            // 否则每次进入都 403 且无从恢复
+            state.libraryId = null;
+            lsSet("nastok_library", "");
+            const sel = $("#library-select");
+            if (sel) sel.value = "";
+            showFeedToast("所选存储库已不可用，已切换为全部存储库", 2600);
+            queueMicrotask(() => resetAndLoad());
+            // 已自行恢复,不再向上抛(调用方多为不 catch 的 resetAndLoad(),否则产生未处理 rejection)
+            return null;
           } else if (ex.status === 401) {
             showPage("page-login");
           } else {
@@ -455,7 +466,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         syncDockFav();
         return;
       }
-      renderSlides(0);
+      // 不必 renderSlides(0) 为整个列表建 DOM:goTo → syncVideoWindow 只重建窗口内 slide
       state.index = Math.min(idx, state.videos.length - 1);
       goTo(state.index, false);
       playCurrent();
@@ -612,14 +623,15 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
 
     /**
      * 彻底退出搜索：清空过滤条件并（可选）重载回普通列表。
-     * reload=true 时重置分页并强制重载普通列表（resetAndLoad 内部也会调用
+     * reload=true 时重置分页并重载普通列表（resetAndLoad 内部也会调用
      * updateSearchExit()）；仅想在 feed 侧切按钮显隐时传 reload:false。
      */
     export function exitSearchFeed({ reload }) {
       state.query = "";
       const input = $("#search-input");
       if (input) input.value = "";
-      if (reload) resetAndLoad(true);
+      // 只是换回普通列表,不需要 refresh=true 强制重扫磁盘(大库上很慢)
+      if (reload) resetAndLoad();
       else updateSearchExit();
     }
 
@@ -631,7 +643,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         ["类型", KIND_LABEL[kind] || "视频"],
         ["路径", v.path || "—"],
         ["存储库", v.library || "—"],
-        ["修改时间", fmtDateTime(v.mtime_iso || v.mtime)],
+        ["修改时间", fmtDateTime(v.mtime || v.mtime_iso)],
       ];
       if (kind === "album") rows.push(["图片数", String(albumImageCount(v))]);
       if (isStaff()) rows.push(["分享", v.shared ? "已分享" : "未分享"]);
@@ -670,7 +682,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         const abs = location.origin + s.url;
         const bits = [`<a href="${escapeHtml(abs)}" target="_blank" rel="noopener" class="info-share-link">${escapeHtml(abs)}</a>`];
         bits.push(`访问 ${s.view_count} 次`);
-        bits.push(s.expires_at ? `有效期至 ${escapeHtml(s.expires_at)}` : "永久有效");
+        bits.push(s.expires_at ? `有效期至 ${escapeHtml(fmtUtc(s.expires_at))}` : "永久有效");
         if (s.has_password) bits.push("需密码访问");
         if (!s.is_active) bits.push("已停用");
         holder.innerHTML = `<div class="info-row"><span>链接</span><b>${bits.join("<br>")}</b></div>`;
@@ -694,6 +706,12 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       if (kind === "album") {
         const albumTrack = document.createElement("div");
         albumTrack.className = "album-track";
+        const indicator = document.createElement("div");
+        indicator.className = "album-indicator";
+        indicator.setAttribute("aria-hidden", "true");
+        indicator.textContent = `1 / ${albumImageCount(v)}`;
+        indicator.classList.toggle("hidden", albumImageCount(v) <= 1);
+        slide.appendChild(indicator);
         // 恢复上次停留的图片位置（slide 被窗口修剪重建后不丢失）
         slide.dataset.albumIdx = String(v._albumIdx > 0 ? Math.floor(v._albumIdx) : 0);
         slide.appendChild(albumTrack);
@@ -1329,6 +1347,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       const info = state.videos[state.index];
       if (!slide || !info) {
         bindGlobalProgress(null);
+        setAmbientSource(null);
         state.currentVideo = null;
         updateDockForKind("video");
         setDockTitle("");
@@ -1356,6 +1375,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         const ind = slide.querySelector(".pause-indicator");
         if (ind) ind.classList.remove("show");
         if (kind === "image") {
+          setAmbientSource(slide.querySelector("img.feed-image"));
           setProgressUI(100);
           syncMediaLabel(1, 1);
         } else {
@@ -1443,6 +1463,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       state.currentVideo = video;
       try { video.playbackRate = state.playbackRate || 1; } catch (_) {}
       const attachSubs = () => {
+        // 列表接口按页标注 has_subtitle;没有旁路字幕就不挂 <track>(否则每条视频都多一次 404)
+        if (!info.has_subtitle) return;
         if (slide.querySelector("track[data-nastok]")) return;
         const track = document.createElement("track");
         track.kind = "subtitles";
@@ -1468,6 +1490,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
         });
       }
       bindGlobalProgress(video);
+      setAmbientSource(video);
       bindMediaSession(info, video);
       updatePauseIndicator(slide, video);
       syncDesktopPlayerControls();
@@ -1665,9 +1688,10 @@ import { $, $$, api, escapeHtml, fmtDateTime, isMobileFeed, lsGet, lsSet, showPa
       state._pullRefreshing = true;
       showFeedToast("正在刷新…", 1400);
       try {
+        // refresh 接口本身已强制重扫并作废缓存,列表直接读新缓存即可(再带 refresh=true 会扫第二遍)
         await api("/api/videos/refresh", { method: "POST" });
         state.seed = null;
-        await resetAndLoad(true);
+        await resetAndLoad();
         showFeedToast(`已刷新，共 ${state.total ?? 0} 个媒体`, 2000);
       } catch (ex) {
         showFeedToast(ex.message || "刷新失败", 2400);

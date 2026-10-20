@@ -3,7 +3,7 @@ import { canAssignLibraries, canManageUser, isSysadmin, roleLabel } from './auth
 import { pauseAll, resetAndLoad } from './feed.js';
 import { syncFeedShareState } from './share-page.js';
 import { state } from './state.js';
-import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel, showPage } from './util.js';
+import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtUtc, scanModeLabel, showPage } from './util.js';
 
     /* ---------- 后台 ---------- */
     export function showAdminToast(msg, ms) {
@@ -14,6 +14,19 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
       clearTimeout(el._t);
       el._t = setTimeout(() => el.classList.remove("show"), ms || 2400);
     }
+
+    /* 移动端表格以卡片呈现:每个单元格带上对应表头作为 data-label(CSS ::before 显示) */
+    function labelTableCells(tbody) {
+      const heads = [...tbody.closest("table").querySelectorAll("thead th")].map((th) => th.textContent.trim());
+      tbody.querySelectorAll("tr").forEach((tr) => {
+        [...tr.children].forEach((td, i) => {
+          if (!td.classList.contains("table-empty") && heads[i]) td.dataset.label = heads[i];
+        });
+      });
+    }
+    $$("#page-admin .table-wrap tbody").forEach((tbody) => {
+      new MutationObserver(() => labelTableCells(tbody)).observe(tbody, { childList: true });
+    });
 
     export const ADMIN_PANEL_LOADERS = {
       logs: () => loadLogs(),
@@ -113,7 +126,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         data.items.forEach((log) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${escapeHtml(fmtDateTime(log.created_at))}</td>
+            <td>${escapeHtml(fmtUtc(log.created_at))}</td>
             <td>${escapeHtml(log.username)}</td>
             <td>${escapeHtml(actionMap[log.action] || log.action)}</td>
             <td class="wrap">${escapeHtml(log.detail)}</td>`;
@@ -264,9 +277,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
             <td><span class="badge ${u.is_active ? "badge-on" : "badge-off"}">${u.is_active ? "启用" : "禁用"}</span></td>
             <td></td>`;
           const td = tr.lastElementChild;
-          td.style.display = "flex";
-          td.style.gap = "6px";
-          td.style.flexWrap = "wrap";
+          td.className = "cell-actions";
 
           if (canAssignLibraries(u)) {
             const libsBtn = document.createElement("button");
@@ -403,9 +414,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
             <td><span class="badge ${lib.enabled ? "badge-on" : "badge-off"}">${lib.enabled ? "启用" : "停用"}</span></td>
             <td></td>`;
           const actions = tr.lastElementChild;
-          actions.style.display = "flex";
-          actions.style.gap = "6px";
-          actions.style.flexWrap = "wrap";
+          actions.className = "cell-actions";
 
           const toggleBtn = document.createElement("button");
           toggleBtn.type = "button";
@@ -573,8 +582,11 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         const m = cd.match(/filename="?([^"]+)"?/);
         a.href = URL.createObjectURL(blob);
         a.download = (m && m[1]) || "nasTok-backup.db";
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(a.href);
+        a.remove();
+        // 同步 revoke 会让 Safari/Firefox 的下载被中断:延后释放
+        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
         showAdminToast("备份已开始下载");
       } catch (ex) {
         showAdminToast(ex.message || "备份失败");
@@ -678,7 +690,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         const tbody = $("#shares-tbody");
         tbody.innerHTML = "";
         if (!data.items || !data.items.length) {
-          tbody.innerHTML = '<tr><td class="table-empty" colspan="12">暂无分享</td></tr>';
+          tbody.innerHTML = '<tr><td class="table-empty" colspan="6">暂无分享</td></tr>';
           return;
         }
         data.items.forEach((s) => {
@@ -691,25 +703,21 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
           if (!s.is_active) { status = "已停用"; badge = "badge-off"; }
           else if (expired) { status = "已过期"; badge = "badge-off"; }
           else if (capped) { status = "已达上限"; badge = "badge-off"; }
-          const capLabel = s.max_views != null ? `${s.view_count ?? 0} / ${s.max_views}` : "不限";
+          // 12 列合并为 6 列:媒体(标题+路径)/创建(人+时间)/访问(次数+访客+最近)/限制(有效期·密码·上限)
+          const limits = [
+            s.expires_at ? `至 ${fmtUtc(s.expires_at)}` : "永久",
+            s.has_password ? "有密码" : "",
+            s.max_views != null ? `限 ${s.max_views} 次` : "",
+          ].filter(Boolean).join(" · ");
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${escapeHtml(s.title || "")}</td>
-            <td class="wrap">${escapeHtml(s.path || "")}</td>
-            <td>${escapeHtml(s.created_by_name || "")}</td>
-            <td>${escapeHtml(fmtDateTime(s.created_at))}</td>
-            <td>${s.view_count ?? 0}</td>
-            <td>${s.unique_view_count ?? 0}</td>
-            <td>${escapeHtml(s.last_viewed_at || "-")}</td>
-            <td>${escapeHtml(s.expires_at || "永久")}</td>
-            <td>${s.has_password ? "有" : "—"}</td>
-            <td>${escapeHtml(capLabel)}</td>
+            <td class="cell-stack"><b title="${escapeHtml(s.title || "")}">${escapeHtml(s.title || "")}</b><small title="${escapeHtml(s.path || "")}">${escapeHtml(s.path || "")}</small></td>
+            <td class="cell-stack"><span>${escapeHtml(s.created_by_name || "")}</span><small>${escapeHtml(fmtUtc(s.created_at))}</small></td>
+            <td class="cell-stack"><span>打开 ${s.view_count ?? 0} · 访客 ${s.unique_view_count ?? 0}</span><small>${escapeHtml(s.last_viewed_at ? `最近 ${fmtUtc(s.last_viewed_at)}` : "尚未访问")}</small></td>
+            <td>${escapeHtml(limits)}</td>
             <td><span class="badge ${badge}">${status}</span></td>
-            <td></td>`;
+            <td class="cell-actions"></td>`;
           const actions = tr.lastElementChild;
-          actions.style.display = "flex";
-          actions.style.gap = "6px";
-          actions.style.flexWrap = "wrap";
 
           const copyBtn = document.createElement("button");
           copyBtn.type = "button";
@@ -786,7 +794,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         data.recent_views.forEach((v) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${escapeHtml(v.viewed_at || "")}</td>
+            <td>${escapeHtml(v.viewed_at ? fmtUtc(v.viewed_at) : "")}</td>
             <td>${escapeHtml((v.ip_hash || "").slice(0, 10))}</td>
             <td class="wrap">${escapeHtml(v.user_agent || "")}</td>`;
           tbody.appendChild(tr);
@@ -833,8 +841,9 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, scanModeLabel,
         tbody.innerHTML = "";
         data.items.forEach((t) => {
           const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${escapeHtml(t.username)}</td><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.created_at)}</td><td>${escapeHtml(t.updated_at)}</td><td></td>`;
+          tr.innerHTML = `<td>${escapeHtml(t.username)}</td><td>${escapeHtml(t.name)}</td><td>${escapeHtml(fmtUtc(t.created_at))}</td><td>${escapeHtml(fmtUtc(t.updated_at))}</td><td></td>`;
           const td = tr.querySelector("td:last-child");
+          td.className = "cell-actions";
           const renameBtn = document.createElement("button");
           renameBtn.type = "button";
           renameBtn.className = "btn btn-ghost btn-sm";

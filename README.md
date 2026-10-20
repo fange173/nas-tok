@@ -96,6 +96,8 @@ Environment variables (see comments in `docker-compose.yml` and `.env.example`):
 | `LOGIN_MAX_FAILURES` | `8` | Failed logins per IP before lock |
 | `LOGIN_LOCK_SECONDS` | `300` | Lock duration |
 | `SHARE_VIEW_THROTTLE_SECONDS` | `60` | Share view log throttle per IP+token |
+| `SHARE_AUTH_MAX_FAILURES` | `10` | Wrong share-password attempts per IP before lockout |
+| `SHARE_AUTH_LOCK_SECONDS` | `300` | Share-password lockout window (seconds) |
 | `TRUST_PROXY_HEADERS` | `false` | Trust `X-Forwarded-For` only behind a reverse proxy |
 | `COOKIE_SECURE` | `false` | Set `true` on HTTPS so the session cookie is Secure |
 | `ENABLE_DOCS` | `false` | Enable `/docs` `/redoc` `/openapi.json` |

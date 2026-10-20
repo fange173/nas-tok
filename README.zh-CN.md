@@ -96,6 +96,8 @@ uvicorn app.main:app --reload --port 8080
 | `LOGIN_MAX_FAILURES` | `8` | 同 IP 连续登录失败上限 |
 | `LOGIN_LOCK_SECONDS` | `300` | 锁定秒数 |
 | `SHARE_VIEW_THROTTLE_SECONDS` | `60` | 分享访问同 IP+token 节流秒数 |
+| `SHARE_AUTH_MAX_FAILURES` | `10` | 分享密码同 IP 连续错误次数上限(超限锁定) |
+| `SHARE_AUTH_LOCK_SECONDS` | `300` | 分享密码错误锁定窗口秒数 |
 | `TRUST_PROXY_HEADERS` | `false` | 仅在反代后设 `true`（信任 XFF） |
 | `COOKIE_SECURE` | `false` | HTTPS 反代后设 `true` |
 | `ENABLE_DOCS` | `false` | `true` 时开启 `/docs` `/redoc` `/openapi.json` |

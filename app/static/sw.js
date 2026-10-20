@@ -1,6 +1,6 @@
 /* NasTok Service Worker — 只缓存应用壳;/api/** 与媒体流一律直连网络,绝不落盘。
    大文件/Range 请求严禁经 SW 缓存,否则 quota 会被打爆。 */
-const CACHE = "nastok-shell-v1";
+const CACHE = "nastok-shell-v2";
 const SHELL = ["/", "/static/manifest.webmanifest", "/static/icon.svg", "/static/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -38,7 +38,10 @@ self.addEventListener("fetch", (e) => {
         .then((resp) => {
           if (resp.ok && resp.type === "basic") {
             const copy = resp.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
+            // main.js?v= / style.css?v= 每次部署 URL 都变:先删同路径旧版本,避免缓存无限累积
+            caches.open(CACHE).then((c) =>
+              c.delete(request, { ignoreSearch: true }).then(() => c.put(request, copy))
+            );
           }
           return resp;
         })

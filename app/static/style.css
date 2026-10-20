@@ -313,9 +313,10 @@ button { -webkit-tap-highlight-color: transparent; }
   appearance: none;
   -webkit-appearance: none;
   max-width: 170px;
-  padding: 4px 2px 4px 22px;
+  padding: 4px 2px 4px 24px;
   border: none;
-  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='white' stroke-opacity='0.65' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat left 2px center;
+  /* 箭头 14px + 高不透明度:10px/0.65 时几乎看不出这是可切换「喜欢/标记」的下拉框 */
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-opacity='0.92' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat left 2px center;
   color: #fff;
   font-size: 1.02rem;
   font-weight: 800;
@@ -411,7 +412,27 @@ button { -webkit-tap-highlight-color: transparent; }
 .settings-row + .settings-row {
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
+.settings-group-title {
+  padding: 10px 12px 2px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+}
+.settings-row + .settings-group-title {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.settings-row label:has(.settings-hint) { flex: 1; }
+.settings-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: normal;
+}
 .settings-row label {
+  min-width: 0;
   font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.8);
   flex: 0 0 68px;
@@ -1516,6 +1537,20 @@ td.wrap { white-space: normal; max-width: 280px; word-break: break-all; }
 .badge-on { background: rgba(var(--ok-rgb), 0.14); color: var(--ok); }
 .badge-off { background: rgba(var(--danger-rgb), 0.14); color: var(--danger); }
 td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7px; }
+/* 操作列:按钮单行排列(原先给 td 内联 display:flex 会让单元格脱离表格布局,按钮被挤成多行) */
+td.cell-actions { white-space: nowrap; }
+td.cell-actions .btn + .btn { margin-left: 6px; }
+/* 主信息 + 次要信息两行 */
+td.cell-stack b,
+td.cell-stack span,
+td.cell-stack small {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+td.cell-stack b { font-weight: 650; }
+td.cell-stack small { margin-top: 2px; font-size: 0.72rem; color: var(--text-muted); }
 .pagination {
   display: flex;
   gap: 8px;
@@ -1666,6 +1701,27 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   .top-icon-btn svg { width: 18px; height: 18px; }
 }
 
+/* 桌面环境光:当前画面缩成 48×27 再模糊铺满,填掉竖屏内容两侧的大块纯黑 */
+.ambient-canvas { display: none; }
+@media (min-width: 641px) {
+  .ambient-canvas {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    filter: blur(56px) saturate(1.35) brightness(0.45);
+    transform: scale(1.2);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+  }
+  .fit-contain .ambient-canvas.on { opacity: 1; }
+  .fit-contain .video-slide,
+  .fit-contain .video-slide video,
+  .fit-contain .feed-image { background: transparent; }
+}
+
 @media (max-width: 900px) and (min-width: 641px) {
   .dock-row .time-label { min-width: auto; }
   .dock-row .feed-counter { display: none; }
@@ -1725,7 +1781,8 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   }
   #dock-row { display: none !important; }
   .progress-bar {
-    height: 20px;
+    /* 视觉仍是贴边细线,可点区域加高到 32px,避免手指够不着/误触系统手势区 */
+    height: 32px;
     margin: 0;
     padding: 0 0 calc(3px + env(safe-area-inset-bottom));
     align-items: flex-end;
@@ -1753,7 +1810,7 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   }
   .progress-bar.is-dragging::before,
   .progress-bar.is-dragging .progress-fill {
-    height: 4px;
+    height: 6px;
   }
   .progress-bar:hover .progress-thumb,
   .progress-bar.is-dragging .progress-thumb {
@@ -2049,6 +2106,34 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   padding: 0;
 }
 .search-clear-btn:hover { background: rgba(255, 255, 255, 0.22); }
+.search-filters {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px 0;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.search-filters::-webkit-scrollbar { display: none; }
+.search-filter {
+  flex: none;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.search-filter:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.22); }
+.search-filter.active {
+  background: var(--text);
+  border-color: var(--text);
+  color: #000;
+}
 .search-body {
   flex: 1;
   min-height: 0;
@@ -2088,7 +2173,9 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
 }
 .search-card-cover {
   position: relative;
-  aspect-ratio: 16 / 9;
+  /* 短视频/手机照片以竖屏为主:竖版封面信息密度更高 */
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2102,6 +2189,17 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   display: block;
 }
 .search-card-cover svg { width: 36px; height: 36px; }
+.search-card-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.search-card-poster.ready { opacity: 1; }
 .search-kind-badge {
   position: absolute;
   right: 6px;
@@ -2132,7 +2230,11 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   margin-top: 2px;
 }
 @media (max-width: 640px) {
-  .search-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+  /* 375 宽三列,与常见短视频 App 网格一致 */
+  .search-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .search-body { padding: 10px; }
+  .search-card-info { padding: 6px 8px 8px; }
+  .search-card-path { display: none; }
 }
 .share-password-card {
   position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -2144,6 +2246,7 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   width: min(280px, 80vw); padding: 10px 12px; border-radius: 10px;
   border: 1px solid rgba(255,255,255,.16); background: #111;
 }
+.share-password-error { min-height: 1.2em; margin: 0; font-size: 0.85rem; color: var(--danger); }
 #share-image { width: 100%; height: 100%; object-fit: contain; }
 .unplayable-badge {
   position: absolute; left: 12px; bottom: 88px; z-index: 2;
@@ -2151,13 +2254,90 @@ td .btn-sm { height: 28px; padding: 0 10px; font-size: 0.75rem; border-radius: 7
   background: rgba(0,0,0,.55); color: #fbbf24;
 }
 @media (max-width: 640px) {
-  .table-wrap { overflow-x: auto; }
-  /* 移动端表格尽量单行，超宽靠横向滚动查看 */
-  .table-wrap td.wrap { white-space: nowrap; max-width: none; }
-  .table-wrap td.wrap .btn-sm { white-space: nowrap; }
+  /* 移动端后台表格改为卡片:每行一张卡,字段名来自 td[data-label](admin.js 自动标注);
+     原先横向滚动的宽表在 375 宽下要左右拖才能看到操作按钮,且操作列折行把行高撑到 150px */
+  #page-admin .table-wrap { overflow: visible; border: none; background: transparent; }
+  #page-admin .table-wrap table,
+  #page-admin .table-wrap tbody,
+  #page-admin .table-wrap tr,
+  #page-admin .table-wrap td { display: block; width: 100%; }
+  #page-admin .table-wrap thead { display: none; }
+  #page-admin .table-wrap tr {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-elevated);
+  }
+  #page-admin .table-wrap td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    border: none;
+    white-space: normal;
+    word-break: break-all;
+    text-align: right;
+    max-width: none;
+  }
+  #page-admin .table-wrap td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-align: left;
+  }
+  /* 两行单元格:左列字段名,右列主信息/次要信息上下堆叠 */
+  #page-admin .table-wrap td.cell-stack {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: baseline;
+  }
+  #page-admin .table-wrap td.cell-stack::before { grid-row: span 2; }
+  #page-admin .table-wrap td.cell-stack b,
+  #page-admin .table-wrap td.cell-stack span,
+  #page-admin .table-wrap td.cell-stack small { grid-column: 2; max-width: 100%; white-space: normal; }
+  #page-admin .table-wrap td.cell-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  #page-admin .table-wrap td.cell-actions::before { display: none; }
+  #page-admin .table-wrap td.cell-actions .btn + .btn { margin-left: 0; }
+  #page-admin .table-wrap td.table-empty { justify-content: center; text-align: center; }
+  #page-admin .table-wrap tbody tr:hover { background: var(--bg-elevated); }
 }
 
 /* ---------- 动效降级 ---------- */
+/* 移动端相册页码:桌面左下角已有 global-time 显示 1/3,移动端底栏隐藏,需在画面上提示可左右滑 */
+.album-indicator {
+  display: none;
+  position: absolute;
+  top: calc(56px + env(safe-area-inset-top));
+  right: 12px;
+  z-index: 4;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+@media (max-width: 640px) {
+  .album-indicator:not(.hidden) { display: block; }
+  /* 图片/相册无声音:移动端直接隐藏静音钮(桌面保留音量控件以保持底栏布局稳定) */
+  .feed-page[data-kind="image"] #dock-mute-btn,
+  .feed-page[data-kind="album"] #dock-mute-btn { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

@@ -245,7 +245,10 @@ import { $, $$, api, copyText, showPage } from './util.js';
         $("#share-error-msg").textContent = "视频加载失败";
         $("#share-error").classList.add("show");
       }, { once: true });
-      video.addEventListener("click", () => {
+      // Chrome/Safari 带 controls 时点画面不会切换播放,需自行处理;Firefox 会原生切换,
+      // preventDefault 阻止其默认行为,避免双重切换互相抵消
+      video.addEventListener("click", (e) => {
+        e.preventDefault();
         if (video.paused) video.play().catch(() => {});
         else video.pause();
       });
@@ -304,18 +307,39 @@ import { $, $$, api, copyText, showPage } from './util.js';
       updateShareMuteBtn();
       video.play().catch(() => {});
     });
-    $("#share-password-btn")?.addEventListener("click", async () => {
+    async function submitSharePassword() {
       const token = state._shareToken;
-      if (!token) return;
+      const input = $("#share-password-input");
+      const errEl = $("#share-password-error");
+      if (!token || !input) return;
+      if (!input.value) {
+        if (errEl) errEl.textContent = "请输入密码";
+        input.focus();
+        return;
+      }
+      const btn = $("#share-password-btn");
+      if (btn) btn.disabled = true;
+      if (errEl) errEl.textContent = "";
       try {
         const data = await api(`/api/share/${encodeURIComponent(token)}/auth`, {
           method: "POST",
-          body: JSON.stringify({ password: $("#share-password-input").value }),
+          body: JSON.stringify({ password: input.value }),
         });
         $("#share-password-card").classList.add("hidden");
         mountShareMedia(data, token);
       } catch (ex) {
-        showFeedToast(ex.message || "密码错误", 2200);
+        // 提示写在卡片内:feed-toast 位于隐藏的 feed 页,分享页上看不见
+        if (errEl) errEl.textContent = ex.message || "密码错误";
+        input.select();
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    $("#share-password-btn")?.addEventListener("click", submitSharePassword);
+    $("#share-password-input")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitSharePassword();
       }
     });
     document.addEventListener("visibilitychange", () => {
@@ -327,9 +351,4 @@ import { $, $$, api, copyText, showPage } from './util.js';
       const url = state._shareUrl || location.href;
       const ok = await copyText(url);
       $("#share-sub").textContent = ok ? "链接已复制" : url;
-    });
-
-    document.addEventListener("click", (e) => {
-      if (e.target.closest(".side-more")) return;
-      $$(".side-more-menu").forEach((m) => m.classList.add("hidden"));
     });

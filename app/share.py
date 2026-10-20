@@ -9,7 +9,6 @@ import os
 import secrets
 import threading
 import time
-import urllib.parse
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional
@@ -25,7 +24,9 @@ from app.database import ShareLink, ShareView, User, _verify_password, get_db, u
 from app.slog import slog
 from app.video_handler import (
     IMAGE_EXTENSIONS,
+    _dir_has_image,
     _ensure_under_media,
+    library_enabled_for_path,
     load_album_images,
     stream_video_file,
     user_can_access_media_path,
@@ -49,6 +50,34 @@ SHARE_VIEW_THROTTLE_SECONDS = int(os.getenv("SHARE_VIEW_THROTTLE_SECONDS", "60")
 _share_view_throttle: dict[str, float] = {}
 _share_view_lock = threading.Lock()
 _UNLOCK_TTL = 86400
+
+# 分享密码错误限流:同 IP 对同一分享连续错 N 次后锁定(分享页匿名可达,不限流可被在线爆破)
+SHARE_AUTH_MAX_FAILURES = int(os.getenv("SHARE_AUTH_MAX_FAILURES", "10"))
+SHARE_AUTH_LOCK_SECONDS = int(os.getenv("SHARE_AUTH_LOCK_SECONDS", "300"))
+_share_auth_failures: dict[str, list[float]] = {}
+_share_auth_lock = threading.Lock()
+
+
+def _share_auth_key(request: Request, token: str) -> str:
+    return f"{_ip_hash(get_client_ip(request))}:{token}"
+
+
+def _check_share_auth_allowed(key: str) -> None:
+    now = time.time()
+    with _share_auth_lock:
+        if len(_share_auth_failures) > 5000:
+            for k in [k for k, v in _share_auth_failures.items() if not v or now - v[-1] > SHARE_AUTH_LOCK_SECONDS]:
+                _share_auth_failures.pop(k, None)
+        window = [t for t in _share_auth_failures.get(key, []) if now - t < SHARE_AUTH_LOCK_SECONDS]
+        _share_auth_failures[key] = window
+        if len(window) >= SHARE_AUTH_MAX_FAILURES:
+            remain = int(SHARE_AUTH_LOCK_SECONDS - (now - window[0])) + 1
+            raise HTTPException(status_code=429, detail=f"密码错误次数过多，请 {remain} 秒后再试")
+
+
+def _record_share_auth_failure(key: str) -> None:
+    with _share_auth_lock:
+        _share_auth_failures.setdefault(key, []).append(time.time())
 
 
 def _new_token() -> str:
@@ -80,7 +109,9 @@ def _media_exists(rel: str) -> bool:
     if p.is_file():
         return True
     if p.is_dir():
-        return bool(load_album_images(rel))
+        # 只需判断「有没有图」:提前退出,不必像 load_album_images 那样 stat 全部文件再排序
+        # (相册分享每张图的每个 Range 请求都会走到这里)
+        return _dir_has_image(p)
     return False
 
 
@@ -96,6 +127,9 @@ def _share_expired(share: ShareLink, *, for_stream: bool = False) -> bool:
 def get_active_share(db: Session, token: str, *, for_stream: bool = False) -> ShareLink:
     share = db.scalar(select(ShareLink).where(ShareLink.token == token))
     if not share or not share.is_active or _share_expired(share, for_stream=for_stream):
+        raise HTTPException(status_code=404, detail="分享不存在或已失效")
+    # 存储库被停用/删除后,其中内容不应继续经分享链接公开
+    if not library_enabled_for_path(db, share.video_path):
         raise HTTPException(status_code=404, detail="分享不存在或已失效")
     if not _media_exists(share.video_path):
         raise HTTPException(status_code=404, detail="分享的媒体已不存在")
@@ -435,8 +469,13 @@ def auth_share(
     share = get_active_share(db, token)
     if not (share.password_hash or "").strip():
         return _public_share_body(share, unlocked=True)
+    guard_key = _share_auth_key(request, token)
+    _check_share_auth_allowed(guard_key)
     if not _verify_password(body.password, share.password_hash):
+        _record_share_auth_failure(guard_key)
         raise HTTPException(status_code=401, detail="分享密码错误")
+    with _share_auth_lock:
+        _share_auth_failures.pop(guard_key, None)
     response.set_cookie(
         key=_unlock_cookie_name(token),
         value=_make_unlock_value(token, share.password_hash or ""),
@@ -467,9 +506,8 @@ def stream_share(
         if i < 0 or i >= len(images):
             raise HTTPException(status_code=404, detail="图片不存在")
         rel = images[i].path
-    encoded = urllib.parse.quote(rel, safe="")
     return stream_video_file(
-        encoded,
+        rel,
         range_header=request.headers.get("range"),
         if_range=request.headers.get("if-range"),
     )

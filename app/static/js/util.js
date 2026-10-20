@@ -86,6 +86,16 @@
       return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     }
 
+    /** 后端时间戳(日志/分享/标记)均为 UTC naive 字符串(无时区后缀)：补 Z 后按浏览器本地时区显示，
+     * 直接 fmtDateTime 会把 UTC 原样当本地时间显示(东八区差 8 小时) */
+    export function fmtUtc(value) {
+      if (value == null || value === "") return "—";
+      const raw = String(value).trim();
+      if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) return fmtDateTime(raw.replace(" ", "T"));
+      const d = new Date(raw.replace(" ", "T") + "Z");
+      return Number.isNaN(d.getTime()) ? raw : fmtDateTime(d);
+    }
+
     /** datetime-local 输入值：YYYY-MM-DDTHH:mm */
     export function toDatetimeLocalValue(value) {
       const s = fmtDateTime(value);

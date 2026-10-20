@@ -46,6 +46,9 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
 
     export function updateDockForKind(kind) {
       // 图片也保留音量控件（视觉常驻、布局稳定）；音量操作仅对视频生效(handler 按 kind 守卫)
+      // 供 CSS 按当前条目类型调整底栏(移动端图片隐藏静音钮)
+      const page = $("#page-feed");
+      if (page) page.dataset.kind = kind;
       const dockMute = $("#dock-mute-btn");
       if (dockMute) {
         dockMute.disabled = kind !== "video";
@@ -111,6 +114,11 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       const i = Math.min(count - 1, Math.max(0, idx));
       if (slide) {
         slide.dataset.albumIdx = String(i);
+        const ind = slide.querySelector(".album-indicator");
+        if (ind) {
+          ind.textContent = `${i + 1} / ${count}`;
+          ind.classList.toggle("hidden", count <= 1);
+        }
         const albumTrack = slide.querySelector(".album-track");
         if (albumTrack) {
           albumTrack.style.transition = "";
@@ -119,6 +127,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       }
       // 只在相册是当前条目时写全局进度/页码；构建非当前相册 slide 时不得覆盖当前条目显示
       if (!slide || String(slide.dataset.index) !== String(state.index)) return;
+      setAmbientSource(slide.querySelectorAll(".album-track .feed-image")[i] || null);
       setProgressUI(count ? ((i + 1) / count) * 100 : 0);
       syncMediaLabel(i + 1, count);
     }
@@ -285,7 +294,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
 
     $("#func-menu-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
     $("#top-more-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
-    $("#search-btn").innerHTML = ICON.grid() + '<span class="btn-label">网格</span>';
+    $("#search-btn").innerHTML = ICON.search() + '<span class="btn-label">搜索</span>';
     $("#settings-btn").innerHTML = ICON.gear() + '<span class="btn-label">设置</span>';
     $("#dock-more-btn").innerHTML = ICON.more();
     updateMuteBtn();
@@ -484,6 +493,46 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
     syncRateButtons();
 
 
+    /* ---------- 桌面环境光背景 ---------- */
+    const ambientCanvas = $("#ambient-canvas");
+    let _ambientSrc = null;
+    let _ambientTimer = 0;
+
+    function drawAmbient() {
+      if (!ambientCanvas || !_ambientSrc || isMobileFeed()) return;
+      const el = _ambientSrc;
+      if (el.tagName === "VIDEO" ? el.readyState < 2 : !(el.complete && el.naturalWidth)) return;
+      try {
+        ambientCanvas.getContext("2d").drawImage(el, 0, 0, ambientCanvas.width, ambientCanvas.height);
+        ambientCanvas.classList.add("on");
+      } catch (_) { /* 解码中/跨源等异常:保持上一帧 */ }
+    }
+
+    /** 设置环境光取色来源(当前视频/图片);null 时淡出。视频每秒采样一帧,开销只是一次 48×27 的 drawImage */
+    export function setAmbientSource(el) {
+      if (_ambientTimer) {
+        clearInterval(_ambientTimer);
+        _ambientTimer = 0;
+      }
+      _ambientSrc = el || null;
+      if (!ambientCanvas) return;
+      if (!el) {
+        ambientCanvas.classList.remove("on");
+        return;
+      }
+      // 移动端不显示环境光(CSS 隐藏),不必起采样计时器
+      if (isMobileFeed()) return;
+      if (el.tagName === "VIDEO") {
+        el.addEventListener("loadeddata", drawAmbient, { once: true });
+        _ambientTimer = setInterval(() => {
+          if (!document.hidden && _ambientSrc === el && !el.paused) drawAmbient();
+        }, 1000);
+      } else if (!el.complete) {
+        el.addEventListener("load", () => { if (_ambientSrc === el) drawAmbient(); }, { once: true });
+      }
+      drawAmbient();
+    }
+
     /* ---------- 全局进度条 ---------- */
     export function getCurrentVideo() {
       const slide = $(`#feed-track .video-slide[data-index="${state.index}"]`);
@@ -514,8 +563,10 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
           syncScrubTime(video.currentTime, video.duration);
           const bar = $("#global-progress");
           if (bar) bar.setAttribute("aria-valuenow", String(Math.round(pct)));
+          // 每 ~8s 存一次续播位置;旧写法按「秒数 %8==0」判断,同一秒内 rAF 会触发多次整表 JSON 读写
           const path = video.dataset.path;
-          if (path && Math.floor(video.currentTime) % 8 === 0) {
+          if (path && Math.abs(video.currentTime - (state._lastPosSave || 0)) >= 8) {
+            state._lastPosSave = video.currentTime;
             saveWatchPos(path, video.currentTime, video.duration);
           }
         });
@@ -523,6 +574,7 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       if (video) {
         video.addEventListener("timeupdate", state.onTimeUpdate);
         state._lastProgressPct = null;
+        state._lastPosSave = video.currentTime || 0;
         state.onTimeUpdate();
       } else {
         setProgressUI(0);

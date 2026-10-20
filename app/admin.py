@@ -266,6 +266,9 @@ async def restore_db_backup(
         finally:
             conn.close()
         restore_db_snapshot(tmp_path)
+        # 用户/库分配/凭证版本都已换成备份里的数据:进程内 ACL/扫描缓存必须同步作废,
+        # 否则 45s TTL 内仍按旧库的授权放行拉流
+        invalidate_scan_cache()
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -298,6 +301,7 @@ def factory_reset(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"重置失败: {exc}") from exc
+    invalidate_scan_cache()
     slog("factory_reset", user=admin.username, safety=safety)
     # 重置后 Depends 注入的旧库会话已失效;用新库会话补审计,失败不阻断重置结果
     try:
@@ -540,11 +544,12 @@ def sync_libraries(db: Session = Depends(get_db), admin: User = Depends(require_
         write_audit_log(db, user=admin, action="admin", detail=f"同步存储库: {', '.join(added)}")
     libs = db.scalars(select(Library).order_by(Library.id.asc())).all()
     counts = library_video_counts(db)
+    sizes = library_byte_sizes(db)
     return {
         "ok": True,
         "added": added,
         "skipped": skipped,
-        "items": [_lib_item(lib, counts) for lib in libs],
+        "items": [_lib_item(lib, counts, sizes) for lib in libs],
     }
 
 
@@ -592,7 +597,7 @@ def create_library(
         action="admin",
         detail=f"添加存储库 {lib.name} ({lib.path or '/'})",
     )
-    return _lib_item(lib, library_video_counts(db))
+    return _lib_item(lib, library_video_counts(db), library_byte_sizes(db))
 
 
 @router.get("/libraries/browse")
@@ -654,12 +659,15 @@ def update_library(
         raise HTTPException(status_code=404, detail="存储库不存在")
 
     if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="库名称不能为空")
         conflict = db.scalar(
-            select(Library).where(Library.name == body.name, Library.id != lib_id)
+            select(Library).where(Library.name == name, Library.id != lib_id)
         )
         if conflict:
             raise HTTPException(status_code=409, detail="库名称已存在")
-        lib.name = body.name
+        lib.name = name
     if body.enabled is not None:
         lib.enabled = body.enabled
 
@@ -671,7 +679,7 @@ def update_library(
         action="admin",
         detail=f"更新存储库 {lib.name} enabled={lib.enabled}",
     )
-    return _lib_item(lib, library_video_counts(db))
+    return _lib_item(lib, library_video_counts(db), library_byte_sizes(db))
 
 
 class ShareStatusRequest(BaseModel):

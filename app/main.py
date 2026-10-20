@@ -13,7 +13,6 @@ import re
 import tempfile
 import threading
 import time
-import urllib.parse
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -335,6 +334,9 @@ def change_password(
     return {"ok": True, "user": user_to_dict(user)}
 
 
+_SETTINGS_MAX_BYTES = 8192
+
+
 class SettingsUpdateRequest(BaseModel):
     settings: dict
 
@@ -361,11 +363,13 @@ def update_settings(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if not isinstance(body.settings, dict):
-        raise HTTPException(status_code=400, detail="settings 必须是对象")
     data = _load_user_settings_raw(user)
     data.update(body.settings)
-    user.settings = json.dumps(data, ensure_ascii=False)
+    encoded = json.dumps(data, ensure_ascii=False)
+    # 设置仅存少量偏好开关;限制体积防止任意用户把大 JSON 写进 users 表
+    if len(encoded) > _SETTINGS_MAX_BYTES or len(data) > 64:
+        raise HTTPException(status_code=413, detail="设置内容过大")
+    user.settings = encoded
     db.commit()
     return {"ok": True, "settings": data}
 
@@ -774,19 +778,33 @@ def video_stream(
     payload=Depends(require_stream_access),
 ):
     user_info = lookup_stream_user(db, payload.sub)
-    if not user_info or not user_info[1]:
+    # 用户名缓存命中后还须核对 uid:删除用户再以同名重建时,旧 token 的 cv 可能恰好相等
+    if not user_info or not user_info[1] or int(user_info[0]) != int(payload.uid):
         raise HTTPException(status_code=401, detail="未登录或账户已禁用")
     if int(user_info[2]) != int(payload.cv):
         raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
-    rel = urllib.parse.unquote(file_path_encoded)
+    # ASGI 已对 URL path 解码一次;不得再 unquote,ACL 与读盘必须用同一个字符串
+    rel = file_path_encoded
     if not user_can_access_media_path(db, user_info[0], rel):
         raise HTTPException(status_code=403, detail="无权访问该媒体(未分配对应存储库)")
     return stream_video_file(
-        file_path_encoded,
+        rel,
         download=download,
         range_header=request.headers.get("range"),
         if_range=request.headers.get("if-range"),
     )
+
+
+def _decode_subtitle(data: bytes) -> str:
+    """字幕常见 UTF-8(含 BOM)/UTF-16/GBK 编码;直接按 UTF-8 读会对国内常见的 GBK 字幕抛 500。"""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    for enc in ("utf-8-sig", "gb18030"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 @app.get("/api/videos/subtitles/{file_path_encoded:path}")
@@ -795,16 +813,17 @@ def video_subtitles(
     db: Session = Depends(get_db),
     user: User = Depends(require_password_ok),
 ):
-    rel = urllib.parse.unquote(file_path_encoded)
+    rel = file_path_encoded
     if not user_can_access_media_path(db, user.id, rel):
         raise HTTPException(status_code=403, detail="无权访问该媒体")
     sub = find_sidecar_subtitle(rel)
     if not sub:
         raise HTTPException(status_code=404, detail="没有字幕")
     try:
-        raw = sub.read_text(encoding="utf-8")
+        data = sub.read_bytes()
     except OSError as exc:
         raise HTTPException(status_code=404, detail="字幕无法读取") from exc
+    raw = _decode_subtitle(data)
     if sub.suffix.lower() == ".srt":
         raw = srt_to_vtt(raw)
     elif not raw.lstrip().upper().startswith("WEBVTT"):

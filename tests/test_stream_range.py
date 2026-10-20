@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import urllib.parse
 from email.utils import formatdate
 from pathlib import Path
 
@@ -42,7 +41,7 @@ def media_root(tmp_path, monkeypatch):
 
 
 def _stream(vh, range_header=None, download=False, if_range=None):
-    encoded = urllib.parse.quote("samples/a.mp4", safe="")
+    encoded = "samples/a.mp4"  # 已解码相对路径(与 ACL 同一字符串)
     return vh.stream_video_file(encoded, download=download, range_header=range_header, if_range=if_range)
 
 
@@ -159,7 +158,7 @@ def test_range_serves_across_chunk_boundary(media_root):
     root, vh = media_root
     big = bytes(i % 256 for i in range(vh._STREAM_CHUNK + 12345))
     (root / "samples" / "big.bin").write_bytes(big)
-    encoded = urllib.parse.quote("samples/big.bin", safe="")
+    encoded = "samples/big.bin"  # 已解码相对路径(与 ACL 同一字符串)
     resp = vh.stream_video_file(encoded, range_header="bytes=100-")
     assert resp.status_code == 206
     assert _body(resp) == big[100:]
@@ -168,7 +167,7 @@ def test_range_serves_across_chunk_boundary(media_root):
 def test_zero_byte_file_with_range(media_root):
     root, vh = media_root
     (root / "samples" / "empty.mp4").write_bytes(b"")
-    encoded = urllib.parse.quote("samples/empty.mp4", safe="")
+    encoded = "samples/empty.mp4"  # 已解码相对路径(与 ACL 同一字符串)
     resp = vh.stream_video_file(encoded, range_header="bytes=0-10")
     assert resp.status_code == 200
     assert resp.headers["Content-Length"] == "0"

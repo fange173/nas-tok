@@ -79,6 +79,8 @@ class VideoInfo(BaseModel):
     library_id: Optional[int] = None
     count: Optional[int] = None
     images: Optional[list[ImageInfo]] = None
+    # 相册封面:排序后的第一张图(与 load_album_images 的 (mtime, path) 顺序一致)
+    cover: Optional[str] = None
 
 
 @dataclass
@@ -125,7 +127,10 @@ def normalize_library_path(raw: str) -> str:
 
 
 def _ensure_under_media(rel_path: str) -> Path:
-    decoded = urllib.parse.unquote(rel_path).lstrip("/\\")
+    # 入参一律是已解码的相对路径(ASGI 已解码 URL path;JSON 体本就是明文)。
+    # 绝不能再 unquote:鉴权检查的字符串必须与读盘的字符串完全一致,
+    # 否则 `%2E%2E` 会在 ACL 之后才变成 `..`,且文件名里的 `%41` 会被误解成 `A`。
+    decoded = (rel_path or "").lstrip("/\\")
     full = (MEDIA_ROOT / decoded).resolve()
     try:
         full.relative_to(MEDIA_ROOT)
@@ -383,6 +388,9 @@ def user_can_access_media_path(db: Session, user_id: int, rel: str) -> bool:
     rel = (rel or "").strip().replace("\\", "/").lstrip("/")
     if not rel:
         return False
+    # 归属判定是字符串前缀匹配,`a/../b/x` 会被判给库 a,读盘时却 resolve 到库 b:一律拒绝
+    if any(part == ".." for part in rel.split("/")):
+        return False
     now = time.time()
     cache_key = (user_id, rel)
     with _access_lock:
@@ -395,6 +403,8 @@ def user_can_access_media_path(db: Session, user_id: int, rel: str) -> bool:
     if allowed:
         meta = _resolve_library_meta(db, rel)
         ok = bool(meta and meta[0] in allowed and meta[1])
+        if ok:
+            ok = _symlink_target_allowed(db, rel, meta[0], allowed)
 
     with _access_lock:
         _path_access_cache[cache_key] = (now, ok)
@@ -404,6 +414,28 @@ def user_can_access_media_path(db: Session, user_id: int, rel: str) -> bool:
             for k, _ in oldest:
                 _path_access_cache.pop(k, None)
     return ok
+
+
+def _symlink_target_allowed(db: Session, rel: str, lib_id: int, allowed: frozenset[int]) -> bool:
+    """库内符号链接若指向「另一个」用户无权的库,按真实路径拒绝。
+    真实路径不属于任何库(例如库根本身是指向卷内其他目录的链接)时不额外限制。"""
+    try:
+        real = (MEDIA_ROOT / rel).resolve()
+        real_rel = real.relative_to(MEDIA_ROOT).as_posix()
+    except (ValueError, OSError):
+        return False
+    if real_rel == rel:
+        return True
+    real_meta = _resolve_library_meta(db, real_rel)
+    if not real_meta or real_meta[0] == lib_id:
+        return True
+    return real_meta[0] in allowed and real_meta[1]
+
+
+def library_enabled_for_path(db: Session, rel: str) -> bool:
+    """媒体所属存储库存在且启用(分享等免登录访问用;停用/删除库后其内容不应再公开)。"""
+    meta = _resolve_library_meta(db, rel)
+    return bool(meta and meta[1])
 
 
 def lookup_stream_user(db: Session, username: str) -> Optional[tuple[int, bool, int]]:
@@ -637,6 +669,7 @@ def _scan_album_dir(
     image_count = 0
     max_mtime = 0.0
     total_size = 0
+    cover_key: Optional[tuple[float, str]] = None
     try:
         for dirpath, _dns, filenames in os.walk(album_dir, followlinks=False):
             for fname in filenames:
@@ -659,6 +692,9 @@ def _scan_album_dir(
                 else:
                     image_count += 1
                     total_size += int(st.st_size)
+                    key = (st.st_mtime, rel)
+                    if cover_key is None or key < cover_key:
+                        cover_key = key
                     if st.st_mtime > max_mtime:
                         max_mtime = st.st_mtime
     except OSError:
@@ -682,6 +718,7 @@ def _scan_album_dir(
             library_id=lib_id,
             count=image_count,
             images=None,
+            cover=cover_key[1] if cover_key else None,
         )
     )
 
@@ -923,6 +960,8 @@ def scan_videos(
         ext = Path(v.path or "").suffix.lower()
         if v.kind == "video":
             d["playable"] = ext in BROWSER_VIDEO_EXTENSIONS
+            # 只对当前页标注:前端据此决定是否挂 <track>,避免每条视频都发一次必然 404 的字幕请求
+            d["has_subtitle"] = _has_sidecar_subtitle(v.path)
         else:
             d["playable"] = True
         items.append(d)
@@ -997,13 +1036,13 @@ def _file_slice_iter(path: Path, start: int, length: int):
 
 
 def stream_video_file(
-    file_path_encoded: str,
+    rel_path: str,
     download: bool = False,
     range_header: Optional[str] = None,
     if_range: Optional[str] = None,
 ):
-    rel = urllib.parse.unquote(file_path_encoded)
-    path = _ensure_under_media(rel)
+    """rel_path 为已解码的相对路径(与调用方 ACL 检查用的是同一个字符串)。"""
+    path = _ensure_under_media(rel_path)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
     content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
@@ -1101,7 +1140,7 @@ def edit_video(req: VideoEditRequest) -> dict:
 
 
 def _normalize_rel(rel_path: str) -> str:
-    text = urllib.parse.unquote(rel_path or "").strip().replace("\\", "/").lstrip("/")
+    text = (rel_path or "").strip().replace("\\", "/").lstrip("/")
     parts = [p for p in text.split("/") if p and p != "."]
     if any(p == ".." for p in parts):
         raise HTTPException(status_code=400, detail="非法路径")
@@ -1230,6 +1269,14 @@ def edit_album_images(req: AlbumImagesEditRequest) -> dict:
         changed.append({"old_path": old_full, "path": new_full, "title": dst.stem})
     invalidate_scan_cache()
     return {"ok": True, "album_path": album_rel, "changed": changed}
+
+
+def _has_sidecar_subtitle(rel: str) -> bool:
+    stem = str((MEDIA_ROOT / rel).with_suffix(""))
+    try:
+        return any(os.path.isfile(stem + ext) for ext in (".vtt", ".srt"))
+    except OSError:
+        return False
 
 
 def find_sidecar_subtitle(rel_path: str) -> Optional[Path]:
