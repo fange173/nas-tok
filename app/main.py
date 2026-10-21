@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import glob
+import hashlib
 import json
 import os
 import re
@@ -88,18 +89,40 @@ from app.video_handler import (
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
+CSS_DIR = STATIC_DIR / "css"
 
 _spa_cache: dict[str, str] = {}
+_css_cache: dict[str, str] = {}
+
+
+def _css_parts() -> list[Path]:
+    """样式按职责拆成 css/NN-name.css,按文件名排序拼接(数字前缀决定层叠顺序)。"""
+    return sorted(CSS_DIR.glob("*.css"))
+
+
+def _css_mtime() -> int:
+    return max((f.stat().st_mtime_ns for f in _css_parts()), default=0)
+
+
+def _css_bundle() -> tuple[str, str]:
+    """返回 (拼接后的 CSS, ETag)。仍是一个请求、零构建;mtime 不变时复用缓存。"""
+    parts = _css_parts()
+    key = ":".join(f"{f.name}={f.stat().st_mtime_ns}" for f in parts)
+    if _css_cache.get("key") != key:
+        chunks = [f"/* ==== {f.name} ==== */\n{f.read_text(encoding='utf-8')}" for f in parts]
+        _css_cache["key"] = key
+        _css_cache["css"] = "\n".join(chunks)
+        _css_cache["etag"] = '"' + hashlib.sha1(key.encode()).hexdigest()[:20] + '"'
+    return _css_cache["css"], _css_cache["etag"]
 
 
 def _spa_html() -> str:
     """读取 SPA HTML,把 style.css / js/main.js 的 ?v= 替换为文件 mtime —— 改静态资源自动破缓存。"""
     html_path = STATIC_DIR / "index.html"
-    css_path = STATIC_DIR / "style.css"
     js_dir = STATIC_DIR / "js"
     try:
         html_mtime = html_path.stat().st_mtime_ns
-        css_mtime = css_path.stat().st_mtime_ns
+        css_mtime = _css_mtime()
         # 子模块按 './x.js' 相对导入无版本号;/static/js 挂载点已强制 no-cache+304 协商,
         # 保证部署后子模块与入口同批更新;入口 main.js 注入 js 目录最大 mtime,任何模块改动都会使入口 URL 变化
         js_mtime = max(
@@ -998,12 +1021,12 @@ def share_page(token: str):
 
 
 @app.get("/static/style.css")
-def style_css():
-    return FileResponse(
-        STATIC_DIR / "style.css",
-        media_type="text/css",
-        headers={"Cache-Control": "no-cache"},
-    )
+def style_css(request: Request):
+    css, etag = _css_bundle()
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=css, media_type="text/css; charset=utf-8", headers=headers)
 
 
 @app.get("/static/manifest.webmanifest")

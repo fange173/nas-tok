@@ -1,26 +1,5 @@
 /* NasTok — 深色播放器主题 */
-:root {
-  --bg: #050507;
-  --bg-elevated: #101014;
-  --bg-card: #17171c;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #f4f4f5;
-  --text-muted: #a1a1aa;
-  --accent: #818cf8;
-  --accent-strong: #6366f1;
-  --accent-rgb: 129, 140, 248;
-  --accent-strong-rgb: 99, 102, 241;
-  --accent-soft: rgba(var(--accent-strong-rgb), 0.18);
-  --accent-hover: #a5b4fc;
-  --cyan: #67e8f9;
-  --danger: #fb7185;
-  --danger-rgb: 251, 113, 133;
-  --ok: #34d399;
-  --ok-rgb: 52, 211, 153;
-  --radius: 14px;
-  --font: "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-}
+/* :root 令牌已移至 00-tokens.css */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

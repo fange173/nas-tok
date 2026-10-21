@@ -204,3 +204,21 @@ def test_spa_uses_external_modules_only(web):
     assert "<script>" not in r.text.lower(), "仍存在内联 <script> 块"
     for mod in ("state", "util", "icons", "feed", "player", "admin", "auth", "tags", "search", "share-page"):
         assert mod in "".join(sorted(p.name for p in (ROOT / "app" / "static" / "js").glob("*.js")))
+
+
+def test_style_bundle_concatenates_partials_with_etag(web):
+    """style.css 由 css/NN-*.css 按文件名顺序拼接;ETag 命中返回 304。"""
+    client = web["client"]
+    r = client.get("/static/style.css")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/css")
+    assert r.headers["cache-control"] == "no-cache"
+    body = r.text
+    names = sorted(p.name for p in (ROOT / "app" / "static" / "css").glob("*.css"))
+    assert names, "css/ 目录下没有样式分片"
+    positions = [body.index(f"==== {n} ====") for n in names]
+    assert positions == sorted(positions), "分片拼接顺序应与文件名排序一致"
+    assert "--accent:" in body
+    etag = r.headers["etag"]
+    r2 = client.get("/static/style.css", headers={"If-None-Match": etag})
+    assert r2.status_code == 304
