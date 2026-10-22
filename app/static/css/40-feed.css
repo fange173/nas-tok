@@ -701,3 +701,6 @@
   .feed-page.chrome-dimmed .video-meta { opacity: 0; transform: translateY(12px); pointer-events: none; }
   .exit-immersive-btn, #fullscreen-btn { display: none !important; }
 }
+@media (max-width: 360px) {
+  .exit-search-btn .btn-label { display: none; }
+}

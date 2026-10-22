@@ -702,19 +702,16 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
     /* 「退出搜索」按钮：清空 state.query 后回到普通列表 */
     const exitLabel = ICON.back() + '<span class="btn-label">退出搜索</span>';
     if ($("#exit-search-btn")) $("#exit-search-btn").innerHTML = exitLabel;
-    if ($("#exit-search-btn-m")) $("#exit-search-btn-m").innerHTML = exitLabel;
     const exitSearchClick = () => {
       revealChrome();
       exitSearchFeed({ reload: true });
     };
     $("#exit-search-btn")?.addEventListener("click", exitSearchClick);
-    $("#exit-search-btn-m")?.addEventListener("click", exitSearchClick);
 
     /** 根据是否处于搜索过滤状态，切换两个「退出搜索」按钮的显隐 */
     export function updateSearchExit() {
       const active = !!state.query;
       $("#exit-search-btn")?.classList.toggle("hidden", !active);
-      $("#exit-search-btn-m")?.classList.toggle("hidden", !active);
     }
 
     /**
@@ -965,7 +962,12 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
           errBox.classList.add("show");
           updatePauseIndicator(slide, video);
         };
-        const hideError = () => errBox.classList.remove("show");
+        const hideError = () => {
+          if (slide.dataset.noVideo === "1") return;
+          errBox.classList.remove("show");
+          errBox.querySelector(".error-title").textContent = "播放失败";
+          errBox.querySelector(".retry-btn").classList.remove("hidden");
+        };
 
         errBox.querySelector(".retry-btn").addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -1004,6 +1006,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
 
         video.addEventListener("loadstart", () => {
           if (!eventGenOk()) return;
+          delete slide.dataset.noVideo;
           hideNetBadge();
           showLoader("加载中…");
           updatePauseIndicator(slide, video);
@@ -1028,8 +1031,22 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
           hideError();
           updatePauseIndicator(slide, video);
         });
+        // 浏览器解不了视频轨(如 MPEG-4 Part 2、部分设备上的 HEVC/10bit)时不会报错,只播声音、画面全黑
+        const videoTrackMissing = () => video.readyState >= 1 && !video.videoWidth && !video.videoHeight;
+        video.addEventListener("loadeddata", () => {
+          if (!eventGenOk() || !videoTrackMissing()) return;
+          slide.dataset.noVideo = "1";
+          video.pause();
+          showError("当前设备无法解码这个视频的画面编码，可在「更多 → 下载原文件」后用本地播放器打开");
+          errBox.querySelector(".error-title").textContent = "画面无法显示";
+          errBox.querySelector(".retry-btn").classList.add("hidden");
+        });
         video.addEventListener("playing", () => {
           if (!eventGenOk()) return;
+          if (slide.dataset.noVideo === "1") {
+            video.pause();
+            return;
+          }
           hideLoader();
           hideNetBadge();
           hideError();
@@ -1514,6 +1531,10 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         if (playGen !== state.playGen || idx !== state.index) return;
         video.play().then(() => {
           if (playGen !== state.playGen || idx !== state.index) return;
+          if (slide.dataset.noVideo === "1") {
+            video.pause();
+            return;
+          }
           if (errBox) errBox.classList.remove("show");
           if (loader) loader.classList.add("hidden");
           updatePauseIndicator(slide, video);
