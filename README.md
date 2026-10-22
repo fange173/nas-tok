@@ -14,6 +14,7 @@ NasTok turns folders of clips and pictures into an immersive feed: shuffle or ne
 - **Search and library filter** — substring match on title/path; chip/select to stay inside one library.
 - **Media modes** — video, photos, or mixed; photo albums load their images on demand.
 - **Streaming + download** — HTTP `Range` / `206` and `If-Range` for Safari/iOS; separate download action.
+- **Format conversion** — videos the browser cannot decode (MKV/AVI/WMV/FLV/TS, HEVC `hev1`, 10-bit H.264, AC3/DTS audio, …) are handled per device: remux only when the picture is decodable (seconds), otherwise transcode to H.264. Uses Intel VAAPI hardware encoding when available and falls back to the CPU. Results are cached and evicted least-recently-used beyond the size cap. Needs ffmpeg (bundled in the image).
 - **Favorites and tags** — per-user; default tag `稍后再看` (“watch later”); `PUT` replaces the tag set atomically.
 - **Public shares** — video, photo, or album at `/s/{token}`; optional expiry, password, and max opens; revoking then sharing again issues a **new** token. **Staff only** (admin / sysadmin); still requires library ACL.
 - **Library ACL** — first-level folders under the media root become libraries; new users get none until a sysadmin assigns them. The built-in `admin` account always has every library.
@@ -98,6 +99,10 @@ Environment variables (see comments in `docker-compose.yml` and `.env.example`):
 | `SHARE_VIEW_THROTTLE_SECONDS` | `60` | Share view log throttle per IP+token |
 | `SHARE_AUTH_MAX_FAILURES` | `10` | Wrong share-password attempts per IP before lockout |
 | `SHARE_AUTH_LOCK_SECONDS` | `300` | Share-password lockout window (seconds) |
+| `TRANSCODE_CACHE_DIR` | `/app/data/transcode` | Cache directory for converted videos |
+| `TRANSCODE_CACHE_MAX_GB` | `20` | Cache size cap (GB); least-recently-used files are evicted |
+| `TRANSCODE_HWACCEL` | `auto` | `auto`: use Intel VAAPI when `/dev/dri` is mapped; `vaapi`: force; `none`: CPU only |
+| `TRANSCODE_VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI render node |
 | `TRUST_PROXY_HEADERS` | `false` | Trust `X-Forwarded-For` only behind a reverse proxy |
 | `COOKIE_SECURE` | `false` | Set `true` on HTTPS so the session cookie is Secure |
 | `ENABLE_DOCS` | `false` | Enable `/docs` `/redoc` `/openapi.json` |

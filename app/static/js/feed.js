@@ -3,6 +3,7 @@ import { openAdmin } from './admin.js';
 import { isStaff, isSysadmin } from './auth.js';
 import { ERROR_ICON, ICON, PLAY_ICON } from './icons.js';
 import { bindGlobalProgress, bindMediaSession, bumpChrome, setAmbientSource, ensureAlbumImages, exitImmersive, fillAlbumTrack, getCurrentVideo, resumeWatchPos, revealChrome, saveWatchPos, setAlbumIndex, setMediaMode, setPlaybackRate, setPlayMode, setProgressUI, setDockTitle, syncMediaLabel, updateAlbumProgress, updateDockForKind } from './player.js';
+import { convertedUrl, conversionStatus, ensurePlan, nativeContainer, startConversion } from './playback.js';
 import { shareVideo, unshareVideo } from './share-page.js';
 import { MEDIA_MODES, NEXT_PAGE_PREFETCH_THRESHOLD, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, state } from './state.js';
 import { openTagModal, refreshTagCache } from './tags.js';
@@ -326,6 +327,123 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       const base = `/api/videos/stream/${encoded || (v && v.encoded_path) || ""}`;
       if (v && v.mtime != null && v.mtime !== "") return `${base}?v=${encodeURIComponent(v.mtime)}`;
       return base;
+    }
+
+    /* ---------- 格式转换:原文件 / 转封装 / 转码 ---------- */
+
+    /** 实际用于播放的地址;转换未完成或尚未判断(非原生容器)时返回 null */
+    export function playUrl(v) {
+      if (!v || itemKind(v) !== "video") return v ? streamUrl(v) : null;
+      if (!v._plan) return nativeContainer(v.path) ? streamUrl(v) : null;
+      if (v._plan === "direct") return streamUrl(v);
+      return v._ready ? convertedUrl(v, v._plan) : null;
+    }
+
+    function slideOf(v) {
+      const i = state.videos.indexOf(v);
+      return i < 0 ? null : $(`#feed-track .video-slide[data-index="${i}"]`);
+    }
+
+    function refreshItem(v) {
+      const i = state.videos.indexOf(v);
+      if (i < 0) return;
+      if (i === state.index && $("#page-feed").classList.contains("active")) playCurrent();
+      else syncVideoWindow();
+    }
+
+    function conversionText(v, st) {
+      const pct = Math.round(((st && st.progress) || 0) * 100);
+      return v._plan === "transcode"
+        ? `正在转码 ${pct}%（首次播放需要等待，之后可直接打开）`
+        : `正在转换格式 ${pct}%`;
+    }
+
+    /** 判断播放方式;需要转换时启动(转封装对当前与下一条预先启动,完整转码只对当前条) */
+    function planVideo(i) {
+      const v = state.videos[i];
+      if (!v || itemKind(v) !== "video") return;
+      if (v._plan) {
+        const want = v._plan === "remux" || i === state.index;
+        if (v._plan !== "direct" && !v._ready && !v._converting && !v._convError && want) runConversion(v);
+        return;
+      }
+      ensurePlan(v).then((plan) => {
+        const idx = state.videos.indexOf(v);
+        if (idx < 0) return;
+        if (plan === "direct") {
+          if (!nativeContainer(v.path) && !(v._info && v._info.ffmpeg)) {
+            const slide = slideOf(v);
+            if (slide && !slide.querySelector(".unplayable-badge")) {
+              const badge = document.createElement("div");
+              badge.className = "unplayable-badge";
+              badge.textContent = "浏览器可能无法播放，请下载";
+              slide.appendChild(badge);
+            }
+          }
+          if (!nativeContainer(v.path)) refreshItem(v);
+          return;
+        }
+        if (!v._ready && (plan === "remux" || idx === state.index)) runConversion(v);
+        refreshItem(v);
+      });
+    }
+
+    async function runConversion(v) {
+      if (v._converting) return;
+      v._converting = true;
+      const mode = v._plan;
+      try {
+        let st = await startConversion(v, mode);
+        while (st.status === "queued" || st.status === "running") {
+          const slide = slideOf(v);
+          if (slide && state.videos.indexOf(v) === state.index) slide._showLoader?.(conversionText(v, st));
+          await new Promise((r) => setTimeout(r, 1200));
+          const idx = state.videos.indexOf(v);
+          // 滑远或列表已重置就停止轮询,服务端继续转换,回来时再接着查
+          if (idx < 0 || Math.abs(idx - state.index) > 1) return;
+          st = await conversionStatus(v, mode);
+        }
+        if (st.status === "done") {
+          v._ready = true;
+          refreshItem(v);
+        } else {
+          failConversion(v, st.error);
+        }
+      } catch (ex) {
+        if (ex.status === 429) {
+          // 服务器转换队列已满:提示排队,稍后仍是当前条时再试
+          const slide = slideOf(v);
+          if (slide && state.videos.indexOf(v) === state.index) slide._showLoader?.("转换任务较多，排队中…");
+          setTimeout(() => {
+            if (state.videos.indexOf(v) === state.index) runConversion(v);
+          }, 5000);
+        } else {
+          failConversion(v, ex.message);
+        }
+      } finally {
+        v._converting = false;
+      }
+    }
+
+    function failConversion(v, reason) {
+      v._convError = reason || "转换失败";
+      const slide = slideOf(v);
+      if (slide && state.videos.indexOf(v) === state.index) {
+        slide._showError?.(`格式转换失败（${v._convError}），可在「更多 → 下载原文件」后用本地播放器打开`);
+      }
+    }
+
+    /** 原文件播放失败或只有声音时,若服务器能转换,改走完整转码(每条只回退一次) */
+    function fallbackToTranscode(v) {
+      if (!v || v._fellBack || !(v._info && v._info.ffmpeg) || v._plan === "transcode") return false;
+      v._fellBack = true;
+      v._plan = "transcode";
+      v._ready = false;
+      v._convError = "";
+      const idx = state.videos.indexOf(v);
+      if (idx === state.index) runConversion(v);
+      refreshItem(v);
+      return true;
     }
 
     export function downloadUrl(v) {
@@ -895,13 +1013,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         video.volume = state.volume;
         video.playbackRate = state.playbackRate || 1;
         video.dataset.path = v.path;
-        if (v.playable === false) {
-          const badge = document.createElement("div");
-          badge.className = "unplayable-badge";
-          badge.textContent = "浏览器可能无法播放，请下载";
-          slide.appendChild(badge);
-        }
-        // src 由 syncVideoWindow 按邻接窗口挂载/卸载
+        // src 由 syncVideoWindow 按邻接窗口挂载/卸载;地址由 playUrl 决定(原文件或转换缓存)
 
         video.addEventListener("ended", () => {
           if (String(state.index) !== slide.dataset.index) return;
@@ -962,6 +1074,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
           errBox.classList.add("show");
           updatePauseIndicator(slide, video);
         };
+        slide._showLoader = showLoader;
+        slide._showError = showError;
         const hideError = () => {
           if (slide.dataset.noVideo === "1") return;
           errBox.classList.remove("show");
@@ -974,7 +1088,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
           hideError();
           showLoader("重新加载…");
           const info = state.videos[Number(slide.dataset.index)];
-          const src = info ? streamUrl(info) : video.getAttribute("src");
+          const src = info ? (playUrl(info) || streamUrl(info)) : video.getAttribute("src");
           if (!src) return;
           mountVideoSrc(video, src, { force: true });
           if (String(state.index) === slide.dataset.index) {
@@ -1035,8 +1149,9 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         const videoTrackMissing = () => video.readyState >= 1 && !video.videoWidth && !video.videoHeight;
         video.addEventListener("loadeddata", () => {
           if (!eventGenOk() || !videoTrackMissing()) return;
-          slide.dataset.noVideo = "1";
           video.pause();
+          if (fallbackToTranscode(state.videos[Number(slide.dataset.index)])) return;
+          slide.dataset.noVideo = "1";
           showError("当前设备无法解码这个视频的画面编码，可在「更多 → 下载原文件」后用本地播放器打开");
           errBox.querySelector(".error-title").textContent = "画面无法显示";
           errBox.querySelector(".retry-btn").classList.add("hidden");
@@ -1078,6 +1193,17 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
             if (authMsg) {
               showError(authMsg);
               return;
+            }
+            // 格式问题:先等编码判断,需要转换就交给转换流程;直接播放仍失败则回退完整转码
+            const item = state.videos[Number(slide.dataset.index)];
+            if (item && (code === 3 || code === 4)) {
+              const plan = await ensurePlan(item);
+              if (Number(video.dataset.loadGen) !== gen) return;
+              if (plan !== "direct") {
+                refreshItem(item);
+                return;
+              }
+              if (fallbackToTranscode(item)) return;
             }
             const map = {
               2: "网络错误，无法加载",
@@ -1195,7 +1321,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       if (isVideoDead(video)) {
         const info = state.videos[Number((slide || video.closest(".video-slide")).dataset.index)];
         if (info) {
-          mountVideoSrc(video, streamUrl(info), { force: true });
+          mountVideoSrc(video, playUrl(info) || streamUrl(info), { force: true });
           const gen = ++state.playGen;
           const idx = state.index;
           video.play().then(() => {
@@ -1415,16 +1541,20 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         const video = slide.querySelector("video");
         if (!video) return;
         const ahead = i - state.index;
-        const want = streamUrl(info);
+        if (ahead === 0 || ahead === 1) planVideo(i);
+        const want = playUrl(info);
         let preload = null;
         if (ahead === 0) preload = "auto";
         else if (ahead === 1) preload = autoPreloadNext ? "auto" : "metadata";
         else if ((ahead < 0 && ahead >= -VIDEO_KEEP_BEHIND) || (ahead >= 2 && ahead <= VIDEO_METADATA_AHEAD)) preload = "metadata";
 
-        if (preload) {
+        if (preload && want) {
           const force = isVideoDead(video) && !!video.getAttribute("src");
           mountVideoSrc(video, want, { force, preload });
-        } else if (video.getAttribute("src") || video.error) {
+        } else if (preload && video.getAttribute("src")) {
+          // 判断出需要转换:卸掉先前挂上的原文件,等转换完成再挂
+          unmountVideoSrc(video);
+        } else if (!preload && (video.getAttribute("src") || video.error)) {
           unmountVideoSrc(video);
           const loader = slide.querySelector(".loader-overlay");
           if (loader) loader.classList.add("hidden");
@@ -1515,10 +1645,17 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         return;
       }
 
-      if (info) {
-        // 出错或空挂载时强制重挂，避免「有播放键但点了没反应」
-        mountVideoSrc(video, streamUrl(info), { force: isVideoDead(video) });
+      const url = playUrl(info);
+      if (!url) {
+        // 尚在判断格式或转换中:显示进度,完成后 refreshItem 会再次调用本函数
+        slide._showLoader?.(info._plan && info._plan !== "direct" ? conversionText(info, null) : "正在准备播放…");
+        if (info._convError) slide._showError?.(`格式转换失败（${info._convError}），可在「更多 → 下载原文件」后用本地播放器打开`);
+        bindGlobalProgress(null);
+        syncDesktopPlayerControls();
+        return;
       }
+      // 出错或空挂载时强制重挂，避免「有播放键但点了没反应」
+      mountVideoSrc(video, url, { force: isVideoDead(video) });
       video.muted = state.muted;
       video.volume = state.volume;
 

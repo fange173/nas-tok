@@ -27,7 +27,11 @@ from sqlalchemy.orm import Session
 from app.database import Library, User, UserLibrary
 
 MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", "/media/videos")).resolve()
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+VIDEO_EXTENSIONS = {
+    ".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v",
+    # 以下需服务端 ffmpeg 转换后才能在浏览器播放
+    ".wmv", ".flv", ".ts", ".m2ts", ".mts", ".3gp", ".mpg", ".mpeg", ".rmvb", ".rm", ".asf", ".vob",
+}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"}
 BROWSER_VIDEO_EXTENSIONS = {".mp4", ".webm", ".m4v", ".mov"}
 MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
@@ -1045,7 +1049,18 @@ def stream_video_file(
     path = _ensure_under_media(rel_path)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
-    content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    return stream_path(path, download=download, range_header=range_header, if_range=if_range)
+
+
+def stream_path(
+    path: Path,
+    download: bool = False,
+    range_header: Optional[str] = None,
+    if_range: Optional[str] = None,
+    content_type: Optional[str] = None,
+):
+    """按 Range 流式返回任意已校验路径的文件(原始媒体与转换缓存共用)。"""
+    content_type = content_type or mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     headers = {
         "Accept-Ranges": "bytes",
         "Cache-Control": "private, max-age=3600",

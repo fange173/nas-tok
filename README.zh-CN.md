@@ -14,6 +14,7 @@ NasTok 把 NAS 上散落的视频和图片目录变成类似短视频 App 的浏
 - **搜索与库过滤** —— 按标题 / 路径子串搜索；按存储库筛选。
 - **多种媒体模式** —— 视频、图片、混合；图片合集按需加载图列。
 - **流式播放 + 下载** —— HTTP `Range` / `206` 与 `If-Range`，Safari/iOS 友好；单独下载入口。
+- **格式转换** —— 浏览器解不了的视频（MKV/AVI/WMV/FLV/TS、HEVC hev1、H.264 10bit、AC3/DTS 音轨等）按当前设备能力自动选择：画面可解码时只转封装（几秒完成），否则转码为 H.264；优先 Intel 核显 VAAPI 硬件编码，失败自动改用 CPU。结果缓存复用，超出容量按最近使用淘汰。需要镜像内的 ffmpeg（已内置）。
 - **收藏与标记** —— 每用户独立；默认标记「稍后再看」；`PUT` 全量替换、幂等。
 - **公开分享** —— 视频 / 图片 / 合集生成 `/s/{token}`；可设过期、访问密码、打开次数上限；停用后再分享会 **换新 token**。**仅管理员**（admin / sysadmin）可创建，且仍校验库 ACL。
 - **按库授权** —— 媒体根下一级子目录自动成为存储库；新建用户默认无库。内置 `admin` 始终拥有全部库。
@@ -98,6 +99,10 @@ uvicorn app.main:app --reload --port 8080
 | `SHARE_VIEW_THROTTLE_SECONDS` | `60` | 分享访问同 IP+token 节流秒数 |
 | `SHARE_AUTH_MAX_FAILURES` | `10` | 分享密码同 IP 连续错误次数上限(超限锁定) |
 | `SHARE_AUTH_LOCK_SECONDS` | `300` | 分享密码错误锁定窗口秒数 |
+| `TRANSCODE_CACHE_DIR` | `/app/data/transcode` | 格式转换缓存目录 |
+| `TRANSCODE_CACHE_MAX_GB` | `20` | 转换缓存容量上限（GB），超出按最近使用淘汰 |
+| `TRANSCODE_HWACCEL` | `auto` | `auto`：有 `/dev/dri` 就用 Intel 核显硬件转码；`vaapi`：强制尝试；`none`：只用 CPU |
+| `TRANSCODE_VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI 渲染节点 |
 | `TRUST_PROXY_HEADERS` | `false` | 仅在反代后设 `true`（信任 XFF） |
 | `COOKIE_SECURE` | `false` | HTTPS 反代后设 `true` |
 | `ENABLE_DOCS` | `false` | `true` 时开启 `/docs` `/redoc` `/openapi.json` |

@@ -30,6 +30,13 @@ services:
       # 无法用 admin/admin123 登录时：改为 true，重启一次成功后再改回 false
       # 注意：不要把 data/*.db 打进镜像/仓库，否则会带上别人改过的密码，看起来像「首次启动就登不上」
       - RESET_ADMIN_PASSWORD=false
+      # 格式转换:浏览器解不了的视频(MKV/AVI/WMV/10bit/部分 HEVC 等)转换后缓存到 data/transcode
+      - TRANSCODE_CACHE_MAX_GB=20
+      # auto:映射了 /dev/dri 就用 Intel 核显硬件转码,否则用 CPU;none:强制只用 CPU
+      - TRANSCODE_HWACCEL=auto
+    # Intel 核显硬件转码(N95/N100 等推荐开启):把渲染节点映射进容器
+    # devices:
+    #   - /dev/dri:/dev/dri
     # 数据库备份(在 NAS 上建个定时任务即可;cookie 含 JWT,放私有目录并收紧权限):
     #   curl -sS -c ~/.nastok-cookies -X POST -H 'Content-Type: application/json' \
     #     -d '{"username":"admin","password":"<密码>"}' http://127.0.0.1:8080/api/auth/login && chmod 600 ~/.nastok-cookies

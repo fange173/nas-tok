@@ -4,9 +4,14 @@ FROM docker.m.daocloud.io/library/python:3.11-slim
 
 WORKDIR /app
 
+# ffmpeg:浏览器解不了的视频按需转封装/转码;Intel 核显驱动供 VAAPI 硬件转码(仅 amd64 有此包)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     curl \
+    ffmpeg \
+    && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+         apt-get install -y --no-install-recommends intel-media-va-driver; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=Asia/Shanghai

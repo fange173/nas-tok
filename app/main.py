@@ -65,6 +65,7 @@ from app.database import (
     write_audit_log,
     write_view_log,
 )
+from app import transcode
 from app.slog import slog
 from app.video_handler import (
     MEDIA_ROOT,
@@ -84,6 +85,8 @@ from app.video_handler import (
     rename_album,
     scan_videos,
     srt_to_vtt,
+    _ensure_under_media,
+    stream_path,
     stream_video_file,
     user_can_access_media_path,
 )
@@ -828,6 +831,91 @@ def _decode_subtitle(data: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+class PrepareRequest(BaseModel):
+    path: str = Field(..., min_length=1, max_length=1024)
+    mode: str = Field(..., pattern="^(remux|transcode)$")
+
+
+def _accessible_media_file(db: Session, user_id: int, rel: str) -> Path:
+    """校验库权限后返回媒体文件的绝对路径;无权 403,不存在 404。"""
+    if not user_can_access_media_path(db, user_id, rel):
+        raise HTTPException(status_code=403, detail="无权访问该媒体")
+    full = _ensure_under_media(rel)
+    if not full.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    return full
+
+
+@app.get("/api/videos/playinfo")
+def video_playinfo(
+    path: str = Query(..., min_length=1, max_length=1024),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_ok),
+):
+    """编码信息与两种转换的缓存状态,前端据此判断能否直接播放、该走哪种转换。"""
+    full = _accessible_media_file(db, user.id, path)
+    if not transcode.available():
+        return {"ffmpeg": False, "probe": None}
+    return {
+        "ffmpeg": True,
+        "probe": transcode.probe(full),
+        "remux": transcode.status(full, "remux"),
+        "transcode": transcode.status(full, "transcode"),
+    }
+
+
+@app.post("/api/videos/prepare")
+def video_prepare(
+    body: PrepareRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_ok),
+):
+    full = _accessible_media_file(db, user.id, body.path)
+    if not transcode.available():
+        raise HTTPException(status_code=501, detail="服务器未安装 ffmpeg，无法转换格式")
+    try:
+        return transcode.start(full, body.mode)
+    except transcode.QueueFull:
+        raise HTTPException(status_code=429, detail="转换任务排队过多，请稍后再试")
+
+
+@app.get("/api/videos/prepare")
+def video_prepare_status(
+    path: str = Query(..., min_length=1, max_length=1024),
+    mode: str = Query(..., pattern="^(remux|transcode)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_password_ok),
+):
+    full = _accessible_media_file(db, user.id, path)
+    return transcode.status(full, mode)
+
+
+@app.get("/api/videos/converted/{file_path_encoded:path}")
+def video_converted(
+    file_path_encoded: str,
+    request: Request,
+    mode: str = Query(..., pattern="^(remux|transcode)$"),
+    db: Session = Depends(get_db),
+    payload=Depends(require_stream_access),
+):
+    """播放转换后的缓存文件;鉴权与 /api/videos/stream 一致(Range 请求多,走轻量 JWT 校验)。"""
+    user_info = lookup_stream_user(db, payload.sub)
+    if not user_info or not user_info[1] or int(user_info[0]) != int(payload.uid):
+        raise HTTPException(status_code=401, detail="未登录或账户已禁用")
+    if int(user_info[2]) != int(payload.cv):
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
+    full = _accessible_media_file(db, user_info[0], file_path_encoded)
+    out = transcode.cached_output(full, mode)
+    if not out:
+        raise HTTPException(status_code=404, detail="转换尚未完成")
+    return stream_path(
+        out,
+        range_header=request.headers.get("range"),
+        if_range=request.headers.get("if-range"),
+        content_type="video/mp4",
+    )
 
 
 @app.get("/api/videos/subtitles/{file_path_encoded:path}")
