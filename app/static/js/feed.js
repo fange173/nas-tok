@@ -266,7 +266,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
             const fresh = data.items.filter((it) => !known.has(it.path));
             const startIdx = state.videos.length;
             state.videos.push(...fresh);
-            if (fresh.length) renderSlides(startIdx);
+            if (fresh.length) renderSlides();
             state.page = page + 1;
             if (state.videos.length >= data.total) state.hasMore = false;
           }
@@ -1156,24 +1156,10 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       }
     }
 
-    export function renderSlides(fromIdx) {
-      const track = $("#feed-track");
-      for (let i = fromIdx; i < state.videos.length; i++) {
-        const v = state.videos[i];
-        const kind = itemKind(v);
-        const slide = document.createElement("div");
-        slide.className = "video-slide";
-        slide.dataset.index = String(i);
-        slide.dataset.kind = kind;
-        slide.style.transform = `translateY(${i * 100}%)`;
-        if (kind === "image" || kind === "album") {
-          buildStillSlide(slide, v, i, kind);
-        } else {
-          buildVideoSlide(slide, v, i);
-        }
-        track.appendChild(slide);
-      }
-      // 新建 DOM 后立即按窗口挂载邻接 src
+    /** 新数据到达后补建窗口内的 slide(窗口外的等滑近时再由 ensureSlide 按需建);
+     *  滑动动画进行中则交给 settleAndPlay 落定后统一处理 */
+    export function renderSlides() {
+      if (state._settling) return;
       syncVideoWindow();
     }
 
@@ -1322,9 +1308,31 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         track.style.transition = "";
       }
       updateFeedCounter();
-      updateNeighborPreload();
+      if (animate) ensureSlide(idx);
+      else updateNeighborPreload();
       ensureUpcomingPage();
       revealChrome();
+    }
+
+    // 与 .feed-track 的 transform 过渡时长一致
+    const SLIDE_MS = 360;
+    let _settleTimer = 0;
+
+    /** 滑动切换后:立即停掉上一条并刷新操作栏,等动画落定再挂载邻接视频、起播当前条。
+     *  动画期间做 video.load()/解码会和滑动抢主线程与解码器,手机上表现为卡顿 */
+    export function settleAndPlay() {
+      if (state.currentVideo) {
+        try { state.currentVideo.pause(); } catch (_) {}
+      }
+      syncDockFav();
+      state._settling = true;
+      clearTimeout(_settleTimer);
+      const idx = state.index;
+      _settleTimer = setTimeout(() => {
+        state._settling = false;
+        if (idx !== state.index) return;
+        playCurrent();
+      }, SLIDE_MS);
     }
 
     // 距离当前过远的 slide 直接从 DOM 移除（state.videos 保留），
@@ -1599,7 +1607,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       if (state.index < state.videos.length - 1) {
         state._swipeLock = true;
         goTo(state.index + 1, true);
-        playCurrent();
+        settleAndPlay();
         setTimeout(() => { state._swipeLock = false; }, 180);
         return;
       }
@@ -1625,7 +1633,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         if (state.index < state.videos.length - 1) {
           state._swipeLock = true;
           goTo(state.index + 1, true);
-          playCurrent();
+          settleAndPlay();
           setTimeout(() => { state._swipeLock = false; }, 180);
         } else if (state.videos.length === before || !state.hasMore) {
           const total = state.total || state.videos.length;
@@ -1648,7 +1656,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       if (state.index > 0) {
         state._swipeLock = true;
         goTo(state.index - 1, true);
-        playCurrent();
+        settleAndPlay();
         setTimeout(() => { state._swipeLock = false; }, 180);
         return;
       }
@@ -1703,6 +1711,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       state._albumAxis = null;
       state._albumFeedIdx = state._onAlbum ? state.index : -1;
       state._pointerType = e.pointerType;
+      state._vpH = viewport.clientHeight || 1;
     });
 
     /** 拖动真正开始后才对鼠标做 pointer capture:按下即捕获会让 click 改派到 viewport,
@@ -1778,10 +1787,15 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         trackEl.classList.add("dragging");
       }
       if (!state._dragCommitted) return;
-      const h = viewport.clientHeight || 1;
-      // 全程用百分比，与 goTo 单位一致，避免松手跳变
-      const pct = -state.index * 100 + (state.dragY / h) * 100;
-      trackEl.style.transform = `translateY(${pct}%)`;
+      // 全程用百分比，与 goTo 单位一致，避免松手跳变;高频 pointermove 按帧合并写入
+      if (!state._dragRaf) {
+        state._dragRaf = requestAnimationFrame(() => {
+          state._dragRaf = 0;
+          if (!state.dragging || !state._dragCommitted) return;
+          const pct = -state.index * 100 + (state.dragY / (state._vpH || 1)) * 100;
+          trackEl.style.transform = `translateY(${pct}%)`;
+        });
+      }
     });
 
     async function doPullRefresh() {

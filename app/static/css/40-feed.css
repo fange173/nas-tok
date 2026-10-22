@@ -173,9 +173,8 @@
   height: 48px;
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: rgba(22, 22, 29, 0.72);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  /* 不用 backdrop-filter:浮在播放中的视频上,每帧重算模糊在手机上很耗 GPU */
+  background: rgba(22, 22, 29, 0.84);
   transition: transform var(--dur-fast) var(--ease), background var(--dur), color var(--dur);
 }
 .rail-ic svg { width: 24px; height: 24px; }
@@ -653,7 +652,7 @@
     gap: 16px;
   }
   .rail-mute { display: flex; }
-  .rail-ic { width: 46px; height: 46px; border-color: transparent; background: rgba(0, 0, 0, 0.28); }
+  .rail-ic { width: 46px; height: 46px; border-color: transparent; background: rgba(0, 0, 0, 0.32); }
   .rail-ic svg { width: 28px; height: 28px; }
   .rail-label { color: #fff; }
   .feed-page[data-kind="image"] .rail-mute,
