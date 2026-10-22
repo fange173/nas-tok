@@ -1,5 +1,5 @@
 /* search.js — 全屏搜索页：关键词搜索 + 结果卡片 + 点击定位播放 */
-import { ICON, MEDIA_MODE_ICON } from './icons.js';
+import { MEDIA_MODE_ICON } from './icons.js';
 import { goTo, loadVideos, playCurrent, resetAndLoad, exitSearchFeed, streamUrl, syncFeedTabSelect } from './feed.js';
 import { setMediaMode, setPlayMode } from './player.js';
 import { itemKind, state } from './state.js';
@@ -16,7 +16,8 @@ import { $, $$, api, escapeHtml, showPage } from './util.js';
     let _hasMore = false;
     let _loadingMore = false;
 
-    export function openSearch() {
+    /** 打开媒体库;focus 为真时聚焦搜索框(手机从底部导航进入时不弹键盘) */
+    export function openSearch(opts = {}) {
       const input = $("#search-input");
       input.value = state.query || "";
       syncClearBtn();
@@ -31,7 +32,7 @@ import { $, $$, api, escapeHtml, showPage } from './util.js';
       const q = (input.value || "").trim();
       if (_q === null || _q !== q || _lib !== (state.libraryId || null)) runSearch(input.value);
       else observePosters($("#search-grid"));
-      setTimeout(() => input.focus(), 60);
+      if (opts.focus) setTimeout(() => input.focus(), 60);
     }
 
     function syncClearBtn() {
@@ -125,7 +126,7 @@ import { $, $$, api, escapeHtml, showPage } from './util.js';
 
     /** 省流量模式或 2G 网络下不取视频首帧封面(每个约几百 KB~1MB),只显示图标。
      * 与播放页「预载下一条」同一判断;Safari 不提供 navigator.connection,照常加载 */
-    function posterAllowed() {
+    export function posterAllowed() {
       const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
       return !(c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g"));
     }
@@ -181,7 +182,7 @@ import { $, $$, api, escapeHtml, showPage } from './util.js';
     }
 
     /** 离开搜索页时卸载封面视频,停止后台元数据请求;回来时重新观察可视区 */
-    function releasePosters() {
+    export function releasePosters() {
       $$("#search-grid video.search-card-poster").forEach((vid) => {
         if (_posterObserver) _posterObserver.unobserve(vid);
         if (vid.getAttribute("src")) {
@@ -240,12 +241,6 @@ import { $, $$, api, escapeHtml, showPage } from './util.js';
     }
 
     export function bindSearchPage() {
-      $("#search-back-btn").innerHTML = ICON.back();
-      $("#search-back-btn").addEventListener("click", () => {
-        releasePosters();
-        showPage("page-feed");
-        playCurrent();
-      });
       $("#search-input").addEventListener("input", () => {
         syncClearBtn();
         clearTimeout(_timer);

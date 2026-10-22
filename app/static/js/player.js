@@ -1,6 +1,6 @@
 /* player.js — 音量/画面适配/沉浸模式/全局进度条 + 事件绑定(由 split_frontend.py 机械切割,勿手改顺序) */
-import { closeTopMore, nextVideo, prevVideo, resetAndLoad, showFeedToast, streamUrl, syncDesktopPlayerControls, togglePlayPause } from './feed.js';
-import { ICON, MEDIA_MODE_ICON, MEDIA_MODE_LABEL } from './icons.js';
+import { nextVideo, positionRail, prevVideo, resetAndLoad, showFeedToast, streamUrl, syncDesktopPlayerControls, togglePlayPause } from './feed.js';
+import { ICON } from './icons.js';
 import { MEDIA_MODES, VIDEO_KEEP_BEHIND, VIDEO_METADATA_AHEAD, albumImageCount, currentItem, itemKind, persistSetting, state } from './state.js';
 import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
 
@@ -21,7 +21,8 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       }
       const dockMute = $("#dock-mute-btn");
       if (dockMute) {
-        dockMute.innerHTML = icon;
+        const ic = dockMute.querySelector(".rail-ic");
+        if (ic) ic.innerHTML = icon;
         dockMute.title = title;
         dockMute.setAttribute("aria-label", title);
         dockMute.classList.toggle("is-muted", !!state.muted);
@@ -164,7 +165,6 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       state._chromeTimer = setTimeout(() => {
         state._chromeTimer = 0;
         if (state.immersive || state.scrubbing) return;
-        if (document.querySelector(".top-more.open")) return;
         const v = getCurrentVideo();
         if (v && !v.paused) page.classList.add("chrome-dimmed");
       }, 2600);
@@ -226,6 +226,8 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       const n = Number(state.playbackRate) || 1;
       const sel = $("#rate-select");
       if (sel) sel.value = String(n);
+      const btn = $("#rate-btn");
+      if (btn) btn.textContent = `${n}×`;
     }
     export function setPlaybackRate(rate) {
       persistSetting("rate", rate);
@@ -267,6 +269,9 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
         btn.title = `播放顺序：${meta.label}（点按切换）`;
         btn.setAttribute("aria-label", `切换播放顺序，当前${meta.label}`);
       }
+      $$("#order-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.order === mode)));
+      const ipOrder = $("#ip-order");
+      if (ipOrder) ipOrder.textContent = PLAY_MODE_META[mode].label;
       // 顺序↔单个循环 列表都是按时间排，无需重载；切进/切出随机才重排列表
       if (reload && sortChanged) {
         state.seed = null;
@@ -277,49 +282,18 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
     export function setMediaMode(mode, reload, persist) {
       state.mediaMode = MEDIA_MODES.includes(mode) ? mode : "video";
       if (persist) persistSetting("media_mode", state.mediaMode);
-      const btn = $("#media-mode-btn");
-      if (btn) {
-        const label = MEDIA_MODE_LABEL[state.mediaMode] || "仅视频";
-        const iconFn = MEDIA_MODE_ICON[state.mediaMode] || MEDIA_MODE_ICON.video;
-        btn.innerHTML = iconFn() + '<span class="btn-label">' + label + '</span>';
-        btn.title = `当前：${label}（点按切换）`;
-        btn.setAttribute("aria-label", `切换媒体类型，当前${label}`);
-        btn.dataset.mode = state.mediaMode;
-      }
+      $$("#media-seg button, #me-media-seg button").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.mode === state.mediaMode));
+      });
       if (reload) {
         state.seed = null;
         resetAndLoad();
       }
     }
 
-    $("#func-menu-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
-    $("#top-more-btn").innerHTML = ICON.user() + '<span class="btn-label">账户</span>';
-    $("#search-btn").innerHTML = ICON.search() + '<span class="btn-label">搜索</span>';
-    $("#settings-btn").innerHTML = ICON.gear() + '<span class="btn-label">设置</span>';
-    $("#dock-more-btn").innerHTML = ICON.more();
     updateMuteBtn();
     setPlayMode(state.playMode, false);
     setMediaMode(state.mediaMode, false);
-
-    // 桌面端：右下角 dock-actions(播放顺序/更多)并入底部控制条、排在全屏按钮左侧；
-    // 移动端保持右下角悬浮。跨断点来回搬同一个节点,事件绑定与菜单结构不受影响。
-    {
-      const dockActions = $("#dock-actions");
-      const fsBtn = $("#fullscreen-btn");
-      if (dockActions && fsBtn) {
-        const home = { parent: dockActions.parentElement, next: dockActions.nextSibling };
-        const mq = window.matchMedia("(min-width: 641px)");
-        const place = () => {
-          if (mq.matches) {
-            fsBtn.parentElement.insertBefore(dockActions, fsBtn);
-          } else if (dockActions.parentElement !== home.parent) {
-            home.parent.insertBefore(dockActions, home.next);
-          }
-        };
-        place();
-        mq.addEventListener("change", place);
-      }
-    }
 
     $("#volume-slider").addEventListener("input", (e) => {
       if (itemKind(currentItem()) !== "video") return;
@@ -342,9 +316,18 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       applyAudioToVideos();
     });
 
+    $$("#order-seg button").forEach((b) => b.addEventListener("click", () => setPlayMode(b.dataset.order, true, true)));
+    const RATE_CYCLE = [1, 1.25, 1.5, 2, 0.5, 0.75];
+    $("#rate-btn")?.addEventListener("click", () => {
+      const cur = Number(state.playbackRate) || 1;
+      const i = RATE_CYCLE.findIndex((r) => Math.abs(r - cur) < 0.01);
+      setPlaybackRate(RATE_CYCLE[(i + 1) % RATE_CYCLE.length]);
+    });
+
     $("#fit-mode").addEventListener("change", (e) => {
       persistSetting("fit_mode", e.target.value);
       applyFitMode();
+      positionRail();
     });
 
     /* 设置面板开关：续播(默认关) / 沉浸播放(默认开,仅移动端生效) */
@@ -374,8 +357,6 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
     syncSettingsSwitches();
 
     // 桌面播放控制栏按钮
-    $("#pc-prev-btn").innerHTML = ICON.prev();
-    $("#pc-next-btn").innerHTML = ICON.next();
     $("#pc-prev-btn").addEventListener("click", () => {
       if (state._swipeLock) return;
       prevVideo();
@@ -415,7 +396,6 @@ import { $, $$, api, fmtTime, isMobileFeed, lsGet, lsSet } from './util.js';
       if (isMobileFeed()) return;
       if (state.immersive) return;
       state.immersive = true;
-      closeTopMore();
       syncImmersiveUi();
       const el = $("#page-feed");
       if (!document.fullscreenElement) {

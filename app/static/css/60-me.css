@@ -1,0 +1,42 @@
+/* 60-me.css — 设置 / 我的 */
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 18px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+.profile-text b { display: block; font-size: 17px; }
+.profile-text small { display: block; margin-top: 2px; color: var(--fg-muted); font-size: var(--fs-md); }
+.me-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; align-items: start; }
+.me-group { margin-bottom: 20px; }
+.me-group h4 { margin: 0 0 8px 4px; color: var(--fg-faint); font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.06em; }
+.list { overflow: hidden; border-radius: var(--r-md); background: var(--surface-2); }
+.li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.li + .li { border-top: 1px solid var(--line); }
+.li-label { flex: 1; min-width: 0; font-weight: 500; }
+.li-label small { display: block; margin-top: 2px; color: var(--fg-faint); font-size: var(--fs-sm); font-weight: 400; }
+.li-select { height: 34px; max-width: 52%; padding: 0 10px; background-color: var(--surface-3); }
+.li-link { cursor: pointer; transition: background var(--dur-fast); }
+.li-link:hover { background: var(--surface-3); }
+.li-chev { color: var(--fg-faint); font-size: 22px; line-height: 1; }
+.li-danger { color: var(--like); }
+.me-status { min-height: 1.4em; margin: 10px 4px 0; color: var(--ok); font-size: var(--fs-md); }
+@media (max-width: 760px) {
+  .me-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 380px) {
+  .li .seg button { padding: 0 8px; }
+}

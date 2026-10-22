@@ -1,0 +1,34 @@
+/* 20-auth.css — 登录与改密页 */
+.auth-page {
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background:
+    radial-gradient(ellipse at 15% 10%, rgba(109, 116, 246, 0.22), transparent 45%),
+    radial-gradient(ellipse at 85% 90%, rgba(192, 132, 252, 0.12), transparent 42%),
+    var(--bg);
+}
+.auth-card {
+  width: min(400px, 100%);
+  padding: 40px 32px 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  background: rgba(16, 16, 22, 0.78);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: modal-in 0.5s var(--ease);
+}
+.auth-card .brand { margin-bottom: 28px; text-align: center; }
+.auth-card .brand h1 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.auth-card .brand p { margin-top: 8px; font-size: var(--fs-md); color: var(--fg-muted); }
+.auth-card .btn-block + .btn-block { margin-top: 10px; }
+@media (max-width: 640px) {
+  .auth-card { padding: 32px 22px 24px; border-radius: 20px; }
+}

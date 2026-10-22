@@ -29,6 +29,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtUtc, scanModeLabel, show
     });
 
     export const ADMIN_PANEL_LOADERS = {
+      overview: () => loadOverview(),
       logs: () => loadLogs(),
       users: () => loadUsers(),
       libs: () => loadLibs(),
@@ -68,7 +69,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtUtc, scanModeLabel, show
       showPage("page-admin");
       // 备份与重置面板仅系统管理员可见
       $("#admin-backup-tab")?.classList.toggle("hidden", !isSysadmin());
-      const target = panel || "libs";
+      const target = panel || "overview";
       $$(".admin-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.panel === target));
       $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${target}`));
       loadAdminPanel(target);
@@ -105,6 +106,38 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtUtc, scanModeLabel, show
       });
     });
 
+    const ACTION_LABEL = { login: "登录", view: "观看", edit: "编辑", delete: "删除", share: "分享", admin: "管理", tag_create: "新建标记", tag_update: "修改标记", tag_delete: "删除标记", tag_assign: "视频标记" };
+
+    /* ---------- 概览 ---------- */
+    let _overviewSeq = 0;
+    export async function loadOverview() {
+      const seq = ++_overviewSeq;
+      try {
+        const d = await api("/api/admin/overview");
+        if (seq !== _overviewSeq) return;
+        const m = d.media || {};
+        const stat = (k, v, sub) => `<div class="stat"><div class="stat-k">${k}</div><div class="stat-v">${v}</div><div class="stat-s">${sub}</div></div>`;
+        const size = fmtBytes(m.bytes || 0).split(" ");
+        $("#overview-stats").innerHTML = [
+          stat("媒体", m.total ?? 0, `视频 ${m.video ?? 0} · 图片 ${m.image ?? 0} · 相册 ${m.album ?? 0}`),
+          stat("占用空间", `${escapeHtml(size[0])}<small>${escapeHtml(size[1] || "")}</small>`, `${(d.libraries || []).length} 个存储库`),
+          stat("用户", d.users?.total ?? 0, `近 24 小时 ${d.users?.viewers_24h ?? 0} 人观看`),
+          stat("有效分享", d.shares?.active ?? 0, d.shares?.expiring_7d ? `${d.shares.expiring_7d} 个将在 7 天内过期` : "近期没有将过期的分享"),
+        ].join("");
+        const libs = d.libraries || [];
+        const maxBytes = Math.max(1, ...libs.map((l) => l.bytes || 0));
+        $("#overview-libs").innerHTML = libs.length
+          ? libs.map((l) => `<div class="bar-row"><span title="${escapeHtml(l.name)}">${escapeHtml(l.name)}${l.enabled ? "" : " · 停用"}</span><span class="bar-track"><i style="width:${Math.max(1, Math.round(((l.bytes || 0) / maxBytes) * 100))}%"></i></span><span class="bar-n">${fmtBytes(l.bytes || 0)}</span></div>`).join("")
+          : '<p class="box-empty">还没有存储库</p>';
+        const recent = d.recent || [];
+        $("#overview-activity").innerHTML = recent.length
+          ? recent.map((r) => `<div class="act"><time>${escapeHtml(fmtUtc(r.created_at).slice(5, 16))}</time><span><b>${escapeHtml(r.username)}</b> ${escapeHtml(ACTION_LABEL[r.action] || r.action)} · ${escapeHtml(r.detail || "")}</span></div>`).join("")
+          : '<p class="box-empty">暂无操作记录</p>';
+      } catch (ex) {
+        if (seq === _overviewSeq) showAdminToast(ex.message || "加载概览失败");
+      }
+    }
+
     let _logsReqSeq = 0;
     export async function loadLogs() {
       const seq = ++_logsReqSeq;
@@ -122,7 +155,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtUtc, scanModeLabel, show
         state.logsTotal = data.total;
         const tbody = $("#logs-tbody");
         tbody.innerHTML = "";
-        const actionMap = { login: "登录", view: "观看", edit: "编辑", delete: "删除", share: "分享", admin: "管理", tag_create: "新建标记", tag_update: "修改标记", tag_delete: "删除标记", tag_assign: "视频标记" };
+        const actionMap = ACTION_LABEL;
         data.items.forEach((log) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `

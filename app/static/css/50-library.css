@@ -1,0 +1,121 @@
+/* 50-library.css — 媒体库:搜索、类型筛选、竖版封面网格 */
+.library-page .view-head { align-items: center; }
+.search-input-wrap { position: relative; flex: 1 1 280px; max-width: 440px; margin-left: auto; }
+.search-input-wrap > svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  color: var(--fg-faint);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.search-input-wrap input {
+  width: 100%;
+  height: 40px;
+  padding: 0 40px 0 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  outline: none;
+  transition: border-color var(--dur);
+}
+.search-input-wrap input:focus { border-color: var(--accent); }
+.search-input-wrap input::-webkit-search-cancel-button { display: none; }
+.search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: var(--fs-lg);
+  line-height: 1;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.search-filters { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; scrollbar-width: none; }
+.search-filters::-webkit-scrollbar { display: none; }
+.search-filter {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur), color var(--dur), border-color var(--dur);
+}
+.search-filter:hover { color: var(--fg); border-color: var(--line-strong); }
+.search-filter.active { background: var(--fg); border-color: var(--fg); color: var(--accent-ink); }
+.search-empty { padding: 48px 20px; color: var(--fg-muted); text-align: center; }
+#search-spinner { width: 26px; height: 26px; margin: 32px auto 0; }
+
+.search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.search-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease), border-color var(--dur);
+}
+.search-card:hover, .search-card:focus-visible { transform: translateY(-2px); border-color: var(--line-strong); outline: none; }
+.search-card-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1d1d26, #0f0f13);
+  color: rgba(255, 255, 255, 0.4);
+}
+.search-card-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.search-card-cover svg { width: 36px; height: 36px; }
+.search-card-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur) ease;
+}
+.search-card-poster.ready { opacity: 1; }
+.search-kind-badge {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  backdrop-filter: blur(6px);
+}
+.search-card-info { padding: 8px 10px 10px; }
+.search-card-title, .search-card-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-card-title { font-size: var(--fs-md); font-weight: 650; }
+.search-card-path { margin-top: 2px; color: var(--fg-faint); font-size: var(--fs-xs); }
+
+@media (max-width: 640px) {
+  .search-input-wrap { flex-basis: 100%; max-width: none; margin-left: 0; }
+  .search-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .search-card { border: 0; border-radius: var(--r-sm); background: transparent; }
+  .search-card:hover { transform: none; }
+  .search-card-cover { border-radius: var(--r-sm); }
+  .search-card-info { padding: 5px 2px 6px; }
+  .search-card-path { display: none; }
+}

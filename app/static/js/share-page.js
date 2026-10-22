@@ -88,6 +88,7 @@ import { $, $$, api, copyText, showPage } from './util.js';
       $$(".side-more-item[data-share-path]").forEach((btn) => {
         if (btn.dataset.sharePath === path) setShareMenuItem(btn, on);
       });
+      document.dispatchEvent(new CustomEvent("nastok:item"));
     }
 
     function shareAlbumCount() {

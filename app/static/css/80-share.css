@@ -1,0 +1,66 @@
+/* 80-share.css — 公开分享页 */
+.share-page {
+  align-items: stretch;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(109, 116, 246, 0.2), transparent 45%),
+    radial-gradient(ellipse at 90% 100%, rgba(192, 132, 252, 0.1), transparent 42%),
+    var(--bg);
+}
+.share-shell { display: flex; flex: 1; flex-direction: column; gap: 16px; width: min(720px, 100%); min-height: 0; margin: 0 auto; }
+.share-video-wrap {
+  position: relative;
+  flex: 1;
+  min-height: min(62vh, 520px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: #000;
+}
+.share-video-wrap video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+#share-image { width: 100%; height: 100%; object-fit: contain; }
+.share-meta { padding: 4px 2px 8px; }
+.share-meta h1 { margin-bottom: 6px; font-size: var(--fs-xl); font-weight: 700; word-break: break-word; }
+.share-meta p { margin-bottom: 14px; color: var(--fg-muted); font-size: var(--fs-md); }
+.share-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.album-page-indicator {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 8;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.share-password-card {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(5, 5, 8, 0.82);
+}
+.share-password-card input {
+  width: min(280px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #111;
+}
+.share-password-error { min-height: 1.2em; color: var(--danger); font-size: var(--fs-md); }
+@media (max-width: 640px) {
+  .share-page { padding: 10px; }
+  .share-video-wrap { min-height: 48vh; border-radius: 14px; }
+  .share-meta h1 { font-size: var(--fs-lg); }
+}

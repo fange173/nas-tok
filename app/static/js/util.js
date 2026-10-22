@@ -51,10 +51,18 @@
       return data;
     }
 
+    /** 切换页面。外壳内的视图(.view)会同时激活 #app-shell;切换后派发 nastok:page 事件 */
     export function showPage(id) {
-      $$(".page").forEach((p) => p.classList.remove("active"));
       const el = document.getElementById(id);
-      if (el) el.classList.add("active");
+      if (!el) return;
+      const inShell = el.classList.contains("view");
+      const shell = document.getElementById("app-shell");
+      $$(".page").forEach((p) => p.classList.toggle("active", inShell ? p === shell : p === el));
+      if (inShell) {
+        $$(".view").forEach((v) => v.classList.toggle("active", v === el));
+        if (shell) shell.dataset.view = id.replace(/^page-/, "");
+      }
+      document.dispatchEvent(new CustomEvent("nastok:page", { detail: id }));
     }
 
     export function fmtTime(s) {

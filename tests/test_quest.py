@@ -336,3 +336,24 @@ def test_album_cover_in_list(web):
     items = client.get("/api/videos/list", params={"media_mode": "images", "sort": "newest", "refresh": "true"}).json()["items"]
     albums = [it for it in items if it["kind"] == "album"]
     assert albums and albums[0]["cover"] == "trip/sub/a.jpg"
+
+
+def test_admin_overview(web):
+    client = web["client"]
+    _login(client)
+    r = client.get("/api/admin/overview")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["media"]["total"] == d["media"]["video"] + d["media"]["image"] + d["media"]["album"]
+    assert d["media"]["video"] >= 1 and d["media"]["bytes"] > 0
+    assert d["users"]["total"] >= 1
+    assert {"active", "expiring_7d"} <= set(d["shares"])
+    assert all(row["action"] != "view" for row in d["recent"])
+    assert d["libraries"] and {"name", "bytes", "count", "enabled"} <= set(d["libraries"][0])
+
+    client.post("/api/admin/users", json={"username": "plain", "password": "plain123", "role": "user"})
+    from fastapi.testclient import TestClient
+
+    other = TestClient(web["main"].app)
+    other.post("/api/auth/login", json={"username": "plain", "password": "plain123"})
+    assert other.get("/api/admin/overview").status_code == 403

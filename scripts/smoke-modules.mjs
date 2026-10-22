@@ -60,6 +60,7 @@ globalThis.document = {
   getElementById: () => fakeEl(),
   createElement: () => fakeEl(),
   addEventListener: noop,
+  dispatchEvent: () => true,
   removeEventListener: noop,
   body: fakeEl(),
   fullscreenElement: null,
@@ -89,4 +90,4 @@ for (const [m, fns] of [
 }
 
 // 顶层副作用(事件绑定/bootstrap())已在 import 时执行过;至此无异常即通过
-console.log("SMOKE OK: 11 个模块全部链接成功,顶层副作用无崩溃,关键导出齐全");
+console.log("SMOKE OK: 全部模块链接成功,顶层副作用无崩溃,关键导出齐全");

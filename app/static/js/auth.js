@@ -69,6 +69,13 @@ import { $, $$, api, showPage } from './util.js';
           }),
         });
         state.user = data.user;
+        if (state._pwdVoluntary) {
+          resetPwdPage();
+          showPage("page-me");
+          const status = $("#me-status");
+          if (status) status.textContent = "密码已修改";
+          return;
+        }
         await loadServerSettings();
         syncSettingsUi();
         enterFeed();
@@ -99,8 +106,27 @@ import { $, $$, api, showPage } from './util.js';
       state.viewed = new Set();
       showPage("page-login");
     }
-    $("#logout-btn").addEventListener("click", doLogout);
-    $("#admin-logout-btn").addEventListener("click", doLogout);
+    $("#me-logout")?.addEventListener("click", doLogout);
+
+    /** 打开改密页;voluntary 为真表示从「设置」主动修改,可取消返回 */
+    export function openChangePassword(voluntary) {
+      state._pwdVoluntary = !!voluntary;
+      $("#change-pwd-form").reset();
+      $("#pwd-error").textContent = "";
+      $("#change-pwd-sub").textContent = voluntary ? "修改当前账户的登录密码" : "首次登录须修改初始密码后才能继续";
+      $("#change-pwd-cancel").classList.toggle("hidden", !voluntary);
+      showPage("page-change-pwd");
+    }
+    /** 恢复为强制改密页的默认文案(取消或完成主动修改后调用) */
+    function resetPwdPage() {
+      state._pwdVoluntary = false;
+      $("#change-pwd-sub").textContent = "首次登录须修改初始密码后才能继续";
+      $("#change-pwd-cancel").classList.add("hidden");
+    }
+    $("#change-pwd-cancel")?.addEventListener("click", () => {
+      resetPwdPage();
+      showPage("page-me");
+    });
 
 
     export function isSysadmin() {

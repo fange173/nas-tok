@@ -1,5 +1,5 @@
 /* tags.js — 标记模态框与标记筛选(由 split_frontend.py 机械切割,勿手改顺序) */
-import { currentTabValue, isVideoDead, pauseAll, resetAndLoad, showFeedToast } from './feed.js';
+import { currentTabValue, isVideoDead, notifyItemChange, pauseAll, resetAndLoad, showFeedToast, syncFeedTabSelect } from './feed.js';
 import { getCurrentVideo } from './player.js';
 import { state } from './state.js';
 import { $, $$, api, escapeHtml } from './util.js';
@@ -126,6 +126,7 @@ import { $, $$, api, escapeHtml } from './util.js';
 
     $("#tag-save-btn").addEventListener("click", async () => {
       if (!_tagModalPath) return;
+      const _savedPath = _tagModalPath;
       const cbs = $$("#tag-list input[type='checkbox']");
       const ids = cbs.filter((c) => c.checked).map((c) => Number(c.value));
       try {
@@ -136,6 +137,8 @@ import { $, $$, api, escapeHtml } from './util.js';
         refreshTagCache();
         closeTagModal();
         showFeedToast("标记已保存", 1400);
+        document.dispatchEvent(new CustomEvent("nastok:tags", { detail: _savedPath }));
+        notifyItemChange();
       } catch (ex) {
         showFeedToast(ex.message || "保存失败", 2200);
       }
@@ -162,17 +165,21 @@ import { $, $$, api, escapeHtml } from './util.js';
       } catch (_) {}
     }
 
+    /** 把用户标记渲染到侧栏(标记下的子项)与手机端标记筛选弹窗 */
     export function syncTagFilter() {
-      const sel = $("#feed-tab-select");
-      if (!sel) return;
       const tags = state.tags || [];
-      let html = '<option value="all">推荐</option><option value="fav">喜欢</option>';
-      if (tags.length) {
-        html += '<option value="__all__">全部标记</option>';
-        for (const t of tags) {
-          html += `<option value="tag:${t.id}">${escapeHtml(t.name)}</option>`;
-        }
+      const side = $("#side-tags");
+      if (side) {
+        side.innerHTML = tags
+          .map((t) => `<button type="button" class="side-tag" data-filter="tag:${t.id}"><span>${escapeHtml(t.name)}</span><small>${t.count || 0}</small></button>`)
+          .join("");
       }
-      sel.innerHTML = html;
-      sel.value = currentTabValue();
+      const list = $("#tag-filter-list");
+      if (list) {
+        const cur = currentTabValue();
+        const rows = [`<button type="button" data-filter="__all__" aria-current="${cur === "__all__"}"><span>全部标记</span></button>`]
+          .concat(tags.map((t) => `<button type="button" data-filter="tag:${t.id}" aria-current="${cur === `tag:${t.id}`}"><span>${escapeHtml(t.name)}</span><small>${t.count || 0} 个</small></button>`));
+        list.innerHTML = tags.length ? rows.join("") : '<p class="empty-sub">还没有标记。播放时点右侧「标记」即可创建。</p>';
+      }
+      syncFeedTabSelect();
     }

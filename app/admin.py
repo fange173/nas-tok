@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections import Counter
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +35,7 @@ from app.video_handler import (
     discover_media_dirs,
     ensure_library_dir,
     find_nested_library_conflict,
+    get_all_videos,
     get_user_library_ids,
     grant_library_to_users,
     invalidate_media_access_cache,
@@ -161,6 +164,71 @@ def _lib_item(lib: Library, counts: dict[int, int] | None = None, sizes: dict[in
         "video_count": video_count,
         "byte_size": int((sizes or {}).get(lib.id, 0)),
         "scan_mode": "recursive" if lib.path else "root-only",
+    }
+
+
+@router.get("/overview")
+def admin_overview(db: Session = Depends(get_db), _: User = Depends(require_staff)):
+    """后台概览:媒体与占用、用户、有效分享、各存储库占用、最近操作(不含观看记录)。"""
+    videos = get_all_videos(db)
+    kinds = Counter(v.kind for v in videos)
+    counts = library_video_counts(db)
+    sizes = library_byte_sizes(db)
+    libs = db.scalars(select(Library)).all()
+    lib_rows = sorted(
+        (
+            {
+                "id": lib.id,
+                "name": lib.name,
+                "enabled": bool(lib.enabled),
+                "count": int(counts.get(lib.id, 0)),
+                "bytes": int(sizes.get(lib.id, 0)),
+            }
+            for lib in libs
+        ),
+        key=lambda r: r["bytes"],
+        reverse=True,
+    )
+    now = utcnow()
+    viewers_24h = db.scalar(
+        select(func.count(func.distinct(AuditLog.user_id))).where(
+            AuditLog.action == "view", AuditLog.created_at >= now - timedelta(hours=24)
+        )
+    ) or 0
+    active_shares = [
+        s
+        for s in db.scalars(select(ShareLink).where(ShareLink.is_active == True)).all()  # noqa: E712
+        if (s.expires_at is None or s.expires_at > now)
+        and (s.max_views is None or int(s.view_count or 0) < int(s.max_views))
+    ]
+    expiring = sum(1 for s in active_shares if s.expires_at and s.expires_at <= now + timedelta(days=7))
+    recent = db.scalars(
+        select(AuditLog).where(AuditLog.action != "view").order_by(AuditLog.created_at.desc()).limit(8)
+    ).all()
+    return {
+        "media": {
+            "total": len(videos),
+            "video": int(kinds.get("video", 0)),
+            "image": int(kinds.get("image", 0)),
+            "album": int(kinds.get("album", 0)),
+            "bytes": int(sum(int(v.size or 0) for v in videos)),
+        },
+        "libraries": lib_rows,
+        "users": {
+            "total": db.scalar(select(func.count(User.id))) or 0,
+            "active": db.scalar(select(func.count(User.id)).where(User.is_active == True)) or 0,  # noqa: E712
+            "viewers_24h": int(viewers_24h),
+        },
+        "shares": {"active": len(active_shares), "expiring_7d": expiring},
+        "recent": [
+            {
+                "username": log.username,
+                "action": log.action,
+                "detail": log.detail,
+                "created_at": log.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            for log in recent
+        ],
     }
 
 
