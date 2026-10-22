@@ -1088,6 +1088,12 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
           hideError();
           showLoader("重新加载…");
           const info = state.videos[Number(slide.dataset.index)];
+          // 转换失败时重试转换本身,而不是重载已知放不了的原文件
+          if (info && info._convError && info._plan !== "direct") {
+            info._convError = "";
+            runConversion(info);
+            return;
+          }
           const src = info ? (playUrl(info) || streamUrl(info)) : video.getAttribute("src");
           if (!src) return;
           mountVideoSrc(video, src, { force: true });
@@ -1473,7 +1479,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       const idx = state.index;
       _settleTimer = setTimeout(() => {
         state._settling = false;
-        if (idx !== state.index) return;
+        if (idx !== state.index || !$("#page-feed").classList.contains("active")) return;
         playCurrent();
       }, SLIDE_MS);
     }
