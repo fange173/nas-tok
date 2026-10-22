@@ -1,6 +1,7 @@
-# 国内加速源；若可用官方 Hub 可改回：FROM python:3.11-slim
+# 默认用国内加速源;可访问官方 Hub 时用 --build-arg BASE_IMAGE=python:3.11-slim(CI 即如此)
 # 由 docker-compose 的 platform 决定架构，避免 exec format error
-FROM docker.m.daocloud.io/library/python:3.11-slim
+ARG BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 

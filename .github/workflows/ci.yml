@@ -54,6 +54,8 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=python:3.11-slim
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
