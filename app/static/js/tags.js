@@ -54,11 +54,13 @@ import { $, $$, api, escapeHtml } from './util.js';
           renameBtn.className = "btn btn-ghost btn-sm tag-rename-btn";
           renameBtn.textContent = "✎";
           renameBtn.title = "重命名";
+          renameBtn.setAttribute("aria-label", `重命名标记 ${t.name}`);
           const delBtn = document.createElement("button");
           delBtn.type = "button";
           delBtn.className = "btn btn-ghost btn-sm tag-del-btn";
           delBtn.textContent = "✕";
           delBtn.title = "删除";
+          delBtn.setAttribute("aria-label", `删除标记 ${t.name}`);
           renameBtn.addEventListener("click", (ev) => {
             ev.preventDefault();
             renameTag(t.id, t.name);

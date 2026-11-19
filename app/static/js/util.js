@@ -152,3 +152,23 @@
         return false;
       }
     }
+
+    // 全局 Esc 关闭最上层打开的模态框
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || e.isComposing) return;
+      const help = document.getElementById("help-overlay");
+      if (help && !help.classList.contains("hidden")) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById("help-close")?.click();
+        return;
+      }
+      const modals = Array.from(document.querySelectorAll(".modal-backdrop.open"));
+      const top = modals[modals.length - 1];
+      if (!top) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const closeBtn = top.querySelector("[id$='-cancel'], [id$='-close'], [id$='-close-btn']");
+      if (closeBtn) closeBtn.click();
+      else top.classList.remove("open");
+    });

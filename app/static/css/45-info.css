@@ -13,7 +13,7 @@
 .ip-sub { margin-top: 4px; color: var(--fg-muted); font-size: var(--fs-sm); }
 .ip-kv { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px 10px; margin-top: 14px; font-size: var(--fs-md); }
 .ip-kv dt { color: var(--fg-faint); }
-.ip-kv dd { word-break: break-all; }
+.ip-kv dd { overflow-wrap: anywhere; word-break: normal; }
 .ip-actions { display: flex; gap: 8px; margin-top: 14px; }
 .ip-sec-title {
   display: flex;
@@ -27,7 +27,7 @@
 }
 .ip-order { color: var(--fg-faint); font-weight: 600; letter-spacing: 0; }
 .ip-share-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: var(--fs-md); color: var(--fg-muted); }
-.ip-share-link { display: block; margin-bottom: 10px; color: var(--accent); font-size: var(--fs-sm); word-break: break-all; }
+.ip-share-link { display: block; margin-bottom: 10px; color: var(--accent); font-size: var(--fs-sm); overflow-wrap: anywhere; word-break: normal; }
 .ip-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .queue { display: flex; flex-direction: column; gap: 2px; }
 .q-item {

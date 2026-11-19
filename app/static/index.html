@@ -188,31 +188,6 @@
           <div class="speed-toast" id="speed-toast">2x</div>
           <div class="seek-toast" id="seek-toast"></div>
           <div class="feed-toast" id="feed-toast" role="status" aria-live="polite"></div>
-          <div class="help-overlay hidden" id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
-            <div class="help-card">
-              <div class="help-desktop">
-                <h3 id="help-title">快捷键</h3>
-                <ul>
-                  <li><kbd>空格</kbd> 播放 / 暂停</li>
-                  <li><kbd>↑</kbd> <kbd>↓</kbd> 上一条 / 下一条（也可滚轮或拖动）</li>
-                  <li><kbd>←</kbd> <kbd>→</kbd> 快退 / 快进 5 秒，相册里翻页</li>
-                  <li><kbd>Shift</kbd>+<kbd>←/→</kbd> 快退 / 快进 30 秒</li>
-                  <li><kbd>L</kbd> 喜欢 · 双击画面也可以</li>
-                  <li><kbd>M</kbd> 静音</li>
-                  <li><kbd>&lt;</kbd> <kbd>&gt;</kbd> 减慢 / 加快播放</li>
-                  <li><kbd>?</kbd> 打开 / 关闭本说明</li>
-                </ul>
-              </div>
-              <div class="help-mobile">
-                <h3>这样浏览更顺手</h3>
-                <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg></span><span><b>上下滑动</b><small>切换上一条 / 下一条</small></span></div>
-                <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></span><span><b>双击画面</b><small>喜欢，会收进「喜欢」</small></span></div>
-                <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><span><b>长按画面</b><small>2 倍速播放，松手恢复</small></span></div>
-                <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></span><span><b>左右滑动</b><small>翻看相册里的图片</small></span></div>
-              </div>
-              <button type="button" class="btn btn-primary btn-block" id="help-close">知道了</button>
-            </div>
-          </div>
         </div>
 
         <div class="bottom-dock" id="bottom-dock">
@@ -606,9 +581,9 @@
   </div>
 
   <!-- 标记筛选(手机「标记」标签再点一次时弹出) -->
-  <div class="modal-backdrop" id="tag-filter-modal">
+  <div class="modal-backdrop" id="tag-filter-modal" role="dialog" aria-modal="true" aria-labelledby="tag-filter-title">
     <div class="modal">
-      <h3>按标记筛选</h3>
+      <h3 id="tag-filter-title">按标记筛选</h3>
       <div class="tag-filter-list" id="tag-filter-list"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="tag-filter-close">关闭</button>
@@ -651,10 +626,10 @@
     </div>
   </section>
 
-  <div class="modal-backdrop" id="share-modal">
+  <div class="modal-backdrop" id="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
     <div class="modal">
       <h3 id="share-modal-title">分享</h3>
-      <p class="empty-sub" id="share-modal-sub"></p>
+      <p class="empty-sub modal-sub" id="share-modal-sub"></p>
       <div class="form-group">
         <label for="share-expire">有效期</label>
         <select id="share-expire">
@@ -667,7 +642,7 @@
       </div>
       <div class="form-group">
         <label for="share-pass">访问密码（可选）</label>
-        <input id="share-pass" type="password" maxlength="128" autocomplete="new-password" />
+        <input id="share-pass" type="password" maxlength="128" autocomplete="new-password" placeholder="不设密码" />
       </div>
       <div class="form-group">
         <label for="share-max-views">最大打开次数（可选）</label>
@@ -681,18 +656,18 @@
   </div>
 
   <!-- ===== 新建用户弹窗 ===== -->
-  <div class="modal-backdrop" id="user-create-modal">
+  <div class="modal-backdrop" id="user-create-modal" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
     <div class="modal">
-      <h3>新建用户</h3>
-      <p class="empty-sub">新建用户默认不分配存储库；需在操作中配置可见库。</p>
-      <form class="create-form" id="create-user-form">
+      <h3 id="user-create-title">新建用户</h3>
+      <p class="empty-sub modal-sub">新建用户默认不分配存储库；需在操作中配置可见库。</p>
+      <form id="create-user-form">
         <div class="form-group">
           <label for="new-user-name">用户名</label>
-          <input id="new-user-name" required minlength="2" />
+          <input id="new-user-name" required minlength="2" placeholder="至少 2 个字符" />
         </div>
         <div class="form-group">
           <label for="new-user-pass">密码</label>
-          <input id="new-user-pass" type="password" required minlength="6" autocomplete="new-password" />
+          <input id="new-user-pass" type="password" required minlength="6" autocomplete="new-password" placeholder="至少 6 位" />
         </div>
         <div class="form-group">
           <label for="new-user-role">角色</label>
@@ -701,43 +676,41 @@
             <option value="admin">管理员</option>
           </select>
         </div>
-        <button type="submit" class="btn btn-primary btn-sm">新建用户</button>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="user-create-cancel">取消</button>
+          <button type="submit" class="btn btn-primary">新建用户</button>
+        </div>
       </form>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="user-create-cancel">取消</button>
-      </div>
     </div>
   </div>
 
   <!-- ===== 添加存储库弹窗 ===== -->
-  <div class="modal-backdrop" id="lib-create-modal">
+  <div class="modal-backdrop" id="lib-create-modal" role="dialog" aria-modal="true" aria-labelledby="lib-create-title">
     <div class="modal">
-      <h3>添加存储库</h3>
-      <form class="create-form" id="create-lib-form">
+      <h3 id="lib-create-title">添加存储库</h3>
+      <form id="create-lib-form">
         <div class="form-group">
-          <label>库名称</label>
-          <input id="new-lib-name" required />
+          <label for="new-lib-name">库名称</label>
+          <input id="new-lib-name" required placeholder="例如 电影" />
         </div>
         <div class="form-group">
-          <label>相对路径（空=根目录）</label>
+          <label for="new-lib-path">相对路径（空=根目录）</label>
           <input id="new-lib-path" placeholder="例如 movies 或 movies/2024" />
         </div>
-        <div class="create-form-actions">
-          <button type="submit" class="btn btn-primary btn-sm">手动添加</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="open-browser-btn">浏览目录</button>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="lib-create-cancel">取消</button>
+          <button type="button" class="btn btn-ghost" id="open-browser-btn">浏览目录</button>
+          <button type="submit" class="btn btn-primary">添加</button>
         </div>
       </form>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="lib-create-cancel">取消</button>
-      </div>
     </div>
   </div>
 
   <!-- ===== 用户存储库分配 ===== -->
-  <div class="modal-backdrop" id="user-libs-modal">
+  <div class="modal-backdrop" id="user-libs-modal" role="dialog" aria-modal="true" aria-labelledby="user-libs-title">
     <div class="modal">
       <h3 id="user-libs-title">配置存储库</h3>
-      <p class="empty-sub" id="user-libs-sub"></p>
+      <p class="empty-sub modal-sub" id="user-libs-sub"></p>
       <div id="user-libs-checks" class="user-libs-checks"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="user-libs-cancel">取消</button>
@@ -747,7 +720,7 @@
   </div>
 
   <!-- ===== 媒体信息弹窗（只读） ===== -->
-  <div class="modal-backdrop" id="info-modal">
+  <div class="modal-backdrop" id="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-modal-title">
     <div class="modal modal-info">
       <div class="browser-head">
         <h3 id="info-modal-title">媒体信息</h3>
@@ -755,17 +728,17 @@
       <div class="info-rows" id="info-modal-rows"></div>
       <div id="info-modal-share-detail"></div>
       <div class="modal-actions">
-        <a href="#" class="btn btn-primary" id="info-modal-download" download>下载</a>
         <button type="button" class="btn btn-ghost" id="info-modal-close">关闭</button>
+        <a href="#" class="btn btn-primary" id="info-modal-download" download>下载</a>
       </div>
     </div>
   </div>
 
   <!-- ===== 目录浏览模态框 ===== -->
-  <div class="modal-backdrop" id="browser-modal">
+  <div class="modal-backdrop" id="browser-modal" role="dialog" aria-modal="true" aria-labelledby="browser-modal-title">
     <div class="modal modal-browser">
       <div class="browser-head">
-        <h3>目录浏览器</h3>
+        <h3 id="browser-modal-title">目录浏览器</h3>
         <span class="browser-path" id="browser-path-label">/</span>
       </div>
       <div class="browser-toolbar">
@@ -781,9 +754,9 @@
   </div>
 
   <!-- ===== 标记模态框 ===== -->
-  <div class="modal-backdrop" id="tag-modal">
+  <div class="modal-backdrop" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
     <div class="modal tag-modal">
-      <h3>标记管理</h3>
+      <h3 id="tag-modal-title">标记管理</h3>
       <div class="tag-modal-path" id="tag-modal-path"></div>
       <div class="tag-create-row">
         <input type="text" id="tag-new-input" placeholder="新建标记…" maxlength="64" />
@@ -791,9 +764,36 @@
       </div>
       <div class="tag-list" id="tag-list"></div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-primary" id="tag-save-btn">保存标记</button>
         <button type="button" class="btn btn-ghost" id="tag-close-btn">关闭</button>
+        <button type="button" class="btn btn-primary" id="tag-save-btn">保存标记</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== 快捷键 / 手势引导 ===== -->
+  <div class="help-overlay hidden" id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-card">
+      <div class="help-desktop">
+        <h3 id="help-title">快捷键</h3>
+        <ul>
+          <li><kbd>空格</kbd> 播放 / 暂停</li>
+          <li><kbd>↑</kbd> <kbd>↓</kbd> 上一条 / 下一条（也可滚轮或拖动）</li>
+          <li><kbd>←</kbd> <kbd>→</kbd> 快退 / 快进 5 秒，相册里翻页</li>
+          <li><kbd>Shift</kbd>+<kbd>←/→</kbd> 快退 / 快进 30 秒</li>
+          <li><kbd>L</kbd> 喜欢 · 双击画面也可以</li>
+          <li><kbd>M</kbd> 静音</li>
+          <li><kbd>&lt;</kbd> <kbd>&gt;</kbd> 减慢 / 加快播放</li>
+          <li><kbd>?</kbd> 打开 / 关闭本说明</li>
+        </ul>
+      </div>
+      <div class="help-mobile">
+        <h3>这样浏览更顺手</h3>
+        <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg></span><span><b>上下滑动</b><small>切换上一条 / 下一条</small></span></div>
+        <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></span><span><b>双击画面</b><small>喜欢，会收进「喜欢」</small></span></div>
+        <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><span><b>长按画面</b><small>2 倍速播放，松手恢复</small></span></div>
+        <div class="g-row"><span class="g-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></span><span><b>左右滑动</b><small>翻看相册里的图片</small></span></div>
+      </div>
+      <button type="button" class="btn btn-primary btn-block" id="help-close">知道了</button>
     </div>
   </div>
 

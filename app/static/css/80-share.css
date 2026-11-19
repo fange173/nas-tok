@@ -18,7 +18,18 @@
   border-radius: var(--r-lg);
   background: #000;
 }
-.share-video-wrap video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.share-video-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 68px;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.48), transparent);
+}
+.share-video-wrap video { position: relative; z-index: 0; display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 #share-image { width: 100%; height: 100%; object-fit: contain; }
 .share-meta { padding: 4px 2px 8px; }
 .share-meta h1 { margin-bottom: 6px; font-size: var(--fs-xl); font-weight: 700; word-break: break-word; }
@@ -63,4 +74,5 @@
   .share-page { padding: 10px; }
   .share-video-wrap { min-height: 48vh; border-radius: 14px; }
   .share-meta h1 { font-size: var(--fs-lg); }
+  .share-actions .btn { min-height: 40px; padding: 0 14px; }
 }

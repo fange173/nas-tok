@@ -103,6 +103,7 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtUtc, scanModeLabel, show
         loadAdminPanel(btn.dataset.panel);
         // 确保被点击的 tab 滚进可视区域
         btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+        setTimeout(updateAdminTabsMask, 320);
       });
     });
 

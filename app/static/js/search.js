@@ -244,7 +244,10 @@ import { $, $$, api, escapeHtml, showPage } from './util.js';
       $("#search-input").addEventListener("input", () => {
         syncClearBtn();
         clearTimeout(_timer);
-        _timer = setTimeout(() => runSearch($("#search-input").value), 350);
+        const val = $("#search-input").value;
+        const empty = !val.trim();
+        if (empty && state.query) exitSearchFeed({ reload: true });
+        _timer = setTimeout(() => runSearch(val), empty ? 80 : 320);
       });
       $("#search-input").addEventListener("keydown", (e) => {
         if (e.key === "Enter") {

@@ -230,6 +230,25 @@
 .side-more-item svg { width: 20px; height: 20px; }
 .side-more-item small { margin-left: auto; padding-left: 12px; color: var(--fg-faint); font-weight: 500; }
 
+/* 横屏铺满画幅时操作栏与翻页按钮浮在画面上:增强底色并在鼠标静止时柔和淡出 */
+.feed-viewport.rail-over-media .rail-ic,
+.feed-viewport.rail-over-media .nav-arrow {
+  background: rgba(12, 12, 18, 0.82);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.feed-viewport.rail-over-media .feed-nav { transition: opacity var(--dur-slow) ease; }
+.feed-page.rail-idle .feed-viewport.rail-over-media .action-rail,
+.feed-page.rail-idle .feed-viewport.rail-over-media .feed-nav {
+  opacity: 0.25;
+}
+.feed-viewport.rail-over-media .action-rail:hover,
+.feed-viewport.rail-over-media .action-rail:focus-within,
+.feed-viewport.rail-over-media .feed-nav:hover,
+.feed-viewport.rail-over-media .feed-nav:focus-within {
+  opacity: 1 !important;
+}
+
 /* 上一条 / 下一条 */
 .feed-nav {
   position: absolute;
@@ -444,8 +463,9 @@
   background: rgba(251, 113, 133, 0.14);
   color: var(--danger);
 }
+.video-slide:has(.error-overlay.show) .video-meta { display: none; }
 .error-title { color: #fff; font-size: var(--fs-lg); font-weight: 750; }
-.error-msg { max-width: 280px; color: rgba(255, 255, 255, 0.7); font-size: var(--fs-md); line-height: 1.45; word-break: break-all; }
+.error-msg { max-width: 280px; color: rgba(255, 255, 255, 0.7); font-size: var(--fs-md); line-height: 1.45; overflow-wrap: anywhere; word-break: normal; }
 .error-overlay .btn { min-width: 120px; margin-top: 4px; }
 .album-indicator {
   position: absolute;
@@ -531,14 +551,16 @@
 
 /* 快捷键 / 手势说明 */
 .help-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 45;
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
   background: var(--scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .help-card {
   width: min(420px, 100%);
@@ -603,6 +625,19 @@
   .feed-page.active { display: block; }
   .ambient-canvas { display: none; }
   .feed-viewport { position: absolute; inset: 0; }
+  .feed-viewport::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 240px;
+    z-index: 7;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.68) 0%, rgba(0, 0, 0, 0.24) 58%, transparent 100%);
+    transition: opacity var(--dur-slow) ease;
+  }
+  .feed-page.chrome-dimmed .feed-viewport::after { opacity: 0; }
 
   .feed-top {
     position: absolute;
@@ -612,7 +647,7 @@
     z-index: 30;
     height: auto;
     padding: max(6px, env(safe-area-inset-top)) 6px 26px;
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.66) 0%, rgba(0, 0, 0, 0.28) 60%, transparent 100%);
     pointer-events: none;
     transition: opacity var(--dur-slow) ease, transform var(--dur-slow) var(--ease);
   }
@@ -652,7 +687,7 @@
     gap: 16px;
   }
   .rail-mute { display: flex; }
-  .rail-ic { width: 46px; height: 46px; border-color: transparent; background: rgba(0, 0, 0, 0.32); }
+  .rail-ic { width: 46px; height: 46px; border-color: rgba(255, 255, 255, 0.14); background: rgba(0, 0, 0, 0.44); }
   .rail-ic svg { width: 28px; height: 28px; }
   .rail-label { color: #fff; }
   .feed-page[data-kind="image"] .rail-mute,
@@ -689,9 +724,10 @@
   .unplayable-badge { top: calc(max(6px, env(safe-area-inset-top)) + 54px); }
   .feed-toast { top: calc(max(6px, env(safe-area-inset-top)) + 60px); }
   .pause-indicator { background: rgba(0, 0, 0, 0.14); }
+  .error-overlay { padding: 24px 72px 24px 24px; }
 
-  .help-overlay { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); align-items: flex-end; padding: 0; }
-  .help-card { border-radius: 22px 22px 0 0; border-width: 1px 0 0; padding: 24px 22px 18px; animation: sheet-in var(--dur-slow) var(--ease); }
+  .help-overlay { align-items: flex-end; padding: 0; }
+  .help-card { border-radius: 22px 22px 0 0; border-width: 1px 0 0; padding: 24px 22px calc(18px + env(safe-area-inset-bottom)); animation: sheet-in var(--dur-slow) var(--ease); }
   .help-desktop { display: none; }
   .help-mobile { display: block; margin-bottom: 12px; }
   .help-mobile h3 { font-size: var(--fs-xl); }

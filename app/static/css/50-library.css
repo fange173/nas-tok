@@ -112,10 +112,11 @@
 
 @media (max-width: 640px) {
   .search-input-wrap { flex-basis: 100%; max-width: none; margin-left: 0; }
-  .search-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .search-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .search-card { border: 0; border-radius: var(--r-sm); background: transparent; }
   .search-card:hover { transform: none; }
   .search-card-cover { border-radius: var(--r-sm); }
-  .search-card-info { padding: 5px 2px 6px; }
+  .search-card-info { padding: 6px 4px 8px; }
+  .search-card-title { font-size: 13px; }
   .search-card-path { display: none; }
 }

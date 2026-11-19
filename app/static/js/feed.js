@@ -252,8 +252,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
           if (Array.isArray(data.library_ids)) state.lastLibraryIds = data.library_ids;
 
           if (!data.items.length && page === 1) {
-            renderFeedEmpty();
             state.hasMore = false;
+            renderFeedEmpty();
           } else {
             $("#feed-empty").classList.add("hidden");
           }
@@ -528,6 +528,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
 
 
     export function renderFeedEmpty() {
+      if (!state.videos.length) state.hasMore = false;
       const box = $("#feed-empty");
       const title = $("#feed-empty-title");
       const sub = $("#feed-empty-sub");
@@ -577,6 +578,10 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         refresh.addEventListener("click", () => doPullRefresh());
         actions.appendChild(refresh);
       }
+      syncDockFav();
+      syncDesktopPlayerControls();
+      updateFeedCounter();
+      notifyItemChange();
     }
 
     export function removeSlideAt(idx) {
@@ -589,11 +594,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       state.page = Math.floor(state.videos.length / state.limit) + 1;
       clearFeedTrack();
       if (!state.videos.length) {
-        state.hasMore = false;
         renderFeedEmpty();
         bindGlobalProgress(null);
-        updateFeedCounter();
-        syncDockFav();
         return;
       }
       // 不必 renderSlides(0) 为整个列表建 DOM:goTo → syncVideoWindow 只重建窗口内 slide
@@ -667,6 +669,8 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
         const b = $(id);
         if (b) b.disabled = !v;
       }
+      const muteBtn = $("#dock-mute-btn");
+      if (muteBtn && !v) muteBtn.disabled = true;
     }
     setRailIcon($("#rail-tag-btn"), ICON.tag(false));
     setRailIcon($("#rail-share-btn"), ICON.share());
@@ -790,6 +794,7 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       if (!vp) return;
       if (isMobileFeed()) {
         vp.style.removeProperty("--rail-x");
+        vp.classList.remove("rail-over-media");
         return;
       }
       const W = vp.clientWidth;
@@ -814,8 +819,33 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
       const gap = (W - shown) / 2;
       const x = Math.max(NAV_COL, gap - RAIL_W - 24);
       vp.style.setProperty("--rail-x", `${Math.round(x)}px`);
+      const overMedia = gap < RAIL_W + NAV_COL + 16;
+      vp.classList.toggle("rail-over-media", overMedia);
+      if (overMedia) {
+        wakeRail();
+      } else {
+        clearTimeout(_railIdleTimer);
+        $("#page-feed")?.classList.remove("rail-idle");
+      }
     }
     window.addEventListener("resize", () => positionRail());
+    let _railIdleTimer = 0;
+    function wakeRail() {
+      const page = $("#page-feed");
+      if (!page) return;
+      page.classList.remove("rail-idle");
+      clearTimeout(_railIdleTimer);
+      if (isMobileFeed()) return;
+      _railIdleTimer = setTimeout(() => {
+        const vp = $("#feed-viewport");
+        const menuOpen = !$("#dock-more-menu")?.classList.contains("hidden");
+        if (vp && vp.classList.contains("rail-over-media") && !menuOpen) page.classList.add("rail-idle");
+      }, 2500);
+    }
+    $("#page-feed")?.addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "touch") wakeRail();
+    });
+    $("#page-feed")?.addEventListener("pointerdown", wakeRail);
 
     /* 「退出搜索」按钮：清空 state.query 后回到普通列表 */
     const exitLabel = ICON.back() + '<span class="btn-label">退出搜索</span>';
@@ -1832,7 +1862,10 @@ import { $, $$, api, escapeHtml, fmtDateTime, fmtUtc, isMobileFeed, lsGet, lsSet
     for (const type of ["loadedmetadata", "load"]) {
       $("#feed-track")?.addEventListener(type, (e) => {
         const slide = e.target.closest && e.target.closest(".video-slide");
-        if (slide && slide.dataset.index === String(state.index)) positionRail();
+        if (slide && slide.dataset.index === String(state.index)) {
+          positionRail();
+          if (type === "loadedmetadata") document.dispatchEvent(new CustomEvent("nastok:meta"));
+        }
       }, true);
     }
 

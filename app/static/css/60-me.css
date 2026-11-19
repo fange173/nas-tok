@@ -28,7 +28,7 @@
 .li + .li { border-top: 1px solid var(--line); }
 .li-label { flex: 1; min-width: 0; font-weight: 500; }
 .li-label small { display: block; margin-top: 2px; color: var(--fg-faint); font-size: var(--fs-sm); font-weight: 400; }
-.li-select { height: 34px; max-width: 52%; padding: 0 10px; background-color: var(--surface-3); }
+.li-select { height: auto; min-height: 36px; max-width: 54%; padding: 7px 10px; background-color: var(--surface-3); }
 .li-link { cursor: pointer; transition: background var(--dur-fast); }
 .li-link:hover { background: var(--surface-3); }
 .li-chev { color: var(--fg-faint); font-size: 22px; line-height: 1; }

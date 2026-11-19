@@ -230,6 +230,10 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, fmtUtc, fmtTim
 
     function renderQueue() {
       const box = $("#ip-queue");
+      if (!state.videos.length) {
+        box.innerHTML = '<div class="queue-empty">暂无待播内容</div>';
+        return;
+      }
       const next = state.videos.slice(state.index + 1, state.index + 6);
       if (!next.length) {
         box.innerHTML = `<div class="queue-empty">${state.hasMore ? "正在加载更多…" : "已经是最后一条了"}</div>`;
@@ -255,6 +259,9 @@ import { $, $$, api, copyText, escapeHtml, fmtBytes, fmtDateTime, fmtUtc, fmtTim
     });
 
     document.addEventListener("nastok:item", () => renderInfoPanel());
+    document.addEventListener("nastok:meta", () => {
+      if (panelVisible()) renderKv(currentItem());
+    });
     let _resizeT = 0;
     window.addEventListener("resize", () => {
       clearTimeout(_resizeT);
